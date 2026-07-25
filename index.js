@@ -1,17 +1,21 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 const express = require('express');
-const QRCode = require('qrcode');
-const WebSocket = require('ws');
 
-// ==================== MANEJO DE COMANDOS GUARDADOS ====================
-const ARCHIVO_COMANDOS = 'comandos_custom.json';
+// ==================== MANEJO DE ARCHIVOS Y DIRECTORIOS ====================
+const SESSION_DIR = path.join(__dirname, 'sesion_whatsapp');
+if (!fs.existsSync(SESSION_DIR)) {
+    fs.mkdirSync(SESSION_DIR, { recursive: true });
+}
+
+const ARCHIVO_COMANDOS = path.join(__dirname, 'comandos_custom.json');
 
 if (!fs.existsSync(ARCHIVO_COMANDOS)) {
     const comandosIniciales = {
-        ".stock": `╭────────────────────────────╮\n💙 ✦ AnubisTV ✦ 💙\n✨ 𝗦𝗧𝗢𝗖𝗞 𝗗𝗜𝗦𝗣𝗢𝗡𝗜𝗕𝗟𝗘 ✨\n╰────────────────────────────╯\n✨ Cuentas disponibles\n⚡ Entrega rápida\n🤝 Atención personalizada\n⚠️ Consulta disponibilidad antes de realizar tu pago.\n🚫 No se realizan reembolsos.\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🎬 𝗦𝗧𝗥𝗘𝗔𝗠𝗜𝗡𝗚 :･ﾟ✧ ⋆⋅☆⋅⋆\n❤️ NETFLIX\n▸ 👤 Perfil $55\n▸ 👥 Completa $230\n💙 PRIME VIDEO\n▸ 👤 Perfil $20\n▸ 👥 Completa $45\n🩵 PARAMOUNT+\n▸ 👤 Perfil $17\n▸ 👥 Completa $45\n💙 DISNEY+\n▸ 👤 Perfil $22\n▸ 👥 Completa $70\n💜 MAX PLATINO\n▸ 👤 Perfil $21\n▸ 👥 Completa $55\n🧡 CRUNCHYROLL\n▸ 👤 Perfil $15\n▸ 👥 Completa $45\n🧡 VIX (Mensual)\n▸ 👤 Perfil $11\n▸ 👥 Completa $20\n🧡 VIX (Anual)\n▸ 👤 Perfil $15\n▸ 👥 Completa $30\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🎵 𝗠𝗨́𝗦𝗜𝗖𝗔 :･ﾟ✧ ⋆⋅☆⋅⋆\n💚 SPOTIFY PREMIUM\n▸ 1 Mes $40\n▸ 3 Meses $85\n❤️ YOUTUBE PREMIUM\n▸ Invitación $25\n▸ Familiar (tus datos) $45\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🛠️ 𝗔𝗣𝗣𝗦 & 𝗛𝗘𝗥𝗥𝗔𝗠𝗜𝗘𝗡𝗧𝗔𝗦 :･ﾟ✧ ⋆⋅☆⋅⋆\n💜 CANVA PRO\n▸ 1 Mes $25\n▸ 3 Meses $50\n▸ 6 Meses $70\n▸ Anual $90\n💼 MICROSOFT 365\n▸ 1 Mes $25\n▸ 2 Meses $50\n▸ 6 Meses $90\n📦 OTROS SERVICIOS\n🦉 Duolingo $25\n🎧 Deezer $30\n🔞 Pornhub $30`,
+        ".stock": `╭────────────────────────────╮\n💙 ✦ AnubisTV ✦ 💙\n✨ 𝗦𝗧𝗢𝗢𝗖𝗞 𝗗𝗜𝗦𝗣𝗢𝗡𝗜𝗕𝗟𝗘 ✨\n╰────────────────────────────╯\n✨ Cuentas disponibles\n⚡ Entrega rápida\n🤝 Atención personalizada\n⚠️ Consulta disponibilidad antes de realizar tu pago.\n🚫 No se realizan reembolsos.\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🎬 𝗦𝗧𝗥𝗘𝗔𝗠𝗜𝗡𝗚 :･ﾟ✧ ⋆⋅☆⋅⋆\n❤️ NETFLIX\n▸ 👤 Perfil $55\n▸ 👥 Completa $230\n💙 PRIME VIDEO\n▸ 👤 Perfil $20\n▸ 👥 Completa $45\n🩵 PARAMOUNT+\n▸ 👤 Perfil $17\n▸ 👥 Completa $45\n💙 DISNEY+\n▸ 👤 Perfil $22\n▸ 👥 Completa $70\n💜 MAX PLATINO\n▸ 👤 Perfil $21\n▸ 👥 Completa $55\n🧡 CRUNCHYROLL\n▸ 👤 Perfil $15\n▸ 👥 Completa $45\n🧡 VIX (Mensual)\n▸ 👤 Perfil $11\n▸ 👥 Completa $20\n🧡 VIX (Anual)\n▸ 👤 Perfil $15\n▸ 👥 Completa $30\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🎵 𝗠𝗨́𝗦𝗜𝗖𝗔 :･ﾟ✧ ⋆⋅☆⋅⋆\n💚 SPOTIFY PREMIUM\n▸ 1 Mes $40\n▸ 3 Meses $85\n❤️ YOUTUBE PREMIUM\n▸ Invitación $25\n▸ Familiar (tus datos) $45\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🛠️ 𝗔𝗣𝗣𝗦 & 𝗛𝗘𝗥𝗥𝗔𝗠𝗜𝗘𝗡𝗧𝗔𝗦 :･ﾟ✧ ⋆⋅☆⋅⋆\n💜 CANVA PRO\n▸ 1 Mes $25\n▸ 3 Meses $50\n▸ 6 Meses $70\n▸ Anual $90\n💼 MICROSOFT 365\n▸ 1 Mes $25\n▸ 2 Meses $50\n▸ 6 Meses $90\n📦 OTROS SERVICIOS\n🦉 Duolingo $25\n🎧 Deezer $30\n🔞 Pornhub $30`,
         ".combo": `🎁 COMBOS\n💥 Ahorra más comprando en combo\n⚡ Entrega rápida\n✅ Stock disponible\n\n🥇 COMBO #1 | Más vendido\n❤️ Netflix\n💜 Max\n🧡 ViX\n💰 Precio: $80\n\n🥈 COMBO #2\n💙 Disney+\n💙 Prime Video\n🧡 Crunchyroll\n💰 Precio: $55\n\n🥉 COMBO #3\n❤️ Netflix\n💙 Disney+\n💙 Prime Video\n💰 Precio: $84\n\n🎬 COMBO #4\n💜 Max\n🩵 Paramount+\n🧡 ViX\n💰 Precio: $45\n\n🍿 COMBO #5\n💙 Disney+\n🩵 Paramount+\n🧡 ViX\n💰 Precio: $45\n\n🔥 COMBO #6\n❤️ Netflix\n💜 Max\n🧡 Crunchyroll\n💰 Precio: $80\n\n🎵 COMBO #7\n💚 Spotify Premium\n❤️ YouTube Premium\n💰 Precio: $70\n\n📺 COMBO #8\n💙 Prime Video\n🩵 Paramount+\n🧡 ViX\n💰 Precio: $43\n\n⭐ COMBO #9\n💙 Disney+\n💜 Max\n🧡 Crunchyroll\n💰 Precio: $55\n\n👑 COMBO #10 | Premium\n❤️ Netflix\n💙 Disney+\n💜 Max\n💙 Prime Video\n💰 Precio: $85\n\n🩵 💫 ANUBISTV 💫🩵 ┊\n🎵 Tidal $30\n👨‍👩‍👧‍👦 Tidal Familiar $45\n🎬 Mubi $30\n👨‍👩‍👧‍👦 Mubi Familiar $40\n🎥 Universal+ $25\n📺 Fox One $25\n🍎 Apple TV $30\n🍎 Apple TV (3 Meses) $50\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 💙 AnubisTV 💙 :･ﾟ✧ ⋆⋅☆⋅⋆\n✨ Calidad • Confianza • Rapidez\n💬 ¡Gracias por tu preferencia!\n\n┊💫 Streaming AnubisTV 💫 ┊`
     };
     fs.writeFileSync(ARCHIVO_COMANDOS, JSON.stringify(comandosIniciales, null, 2));
@@ -29,10 +33,10 @@ function guardarComandosBD(comandos) {
     fs.writeFileSync(ARCHIVO_COMANDOS, JSON.stringify(comandos, null, 2));
 }
 
-// ==================== SERVIDOR WEB ====================
+// ==================== SERVIDOR WEB & CLIENTE QR ====================
 const app = express();
 const PORT = process.env.PORT || 3000;
-let qrCodeImage = '';
+let rawQR = '';
 let botConectado = false;
 
 app.use(express.json());
@@ -45,12 +49,14 @@ app.get('/', (req, res) => {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Panel AnubisTV Bot</title>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
             <style>
                 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: white; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
                 .container { max-width: 800px; width: 100%; }
                 .card { background: #1e293b; padding: 25px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); margin-bottom: 20px; text-align: center; }
                 h1, h2 { color: #38bdf8; margin-top: 0; }
-                img { border-radius: 12px; margin-top: 15px; border: 4px solid #38bdf8; background: white; }
+                #qrcode-box { display: flex; justify-content: center; margin-top: 15px; }
+                #qrcode-box img, #qrcode-box canvas { border-radius: 12px; border: 4px solid #38bdf8; padding: 10px; background: white; }
                 input, textarea { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; font-family: inherit; }
                 textarea { height: 120px; resize: vertical; }
                 button { background: #0284c7; color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
@@ -65,7 +71,8 @@ app.get('/', (req, res) => {
             <div class="container">
                 <div class="card" id="status-card">
                     <h1>💙 AnubisTV Bot 💙</h1>
-                    <p>Iniciando servicio de WhatsApp...</p>
+                    <p id="status-text">Cargando estado...</p>
+                    <div id="qrcode-box"></div>
                 </div>
 
                 <div id="panel-admin" style="display: none;">
@@ -88,37 +95,44 @@ app.get('/', (req, res) => {
             </div>
 
             <script>
+                let qrcodeObj = null;
+                let lastQRValue = '';
+
                 async function checkStatus() {
                     try {
                         const response = await fetch('/api/estado');
                         const data = await response.json();
-                        const statusCard = document.getElementById('status-card');
+                        const statusText = document.getElementById('status-text');
                         const panelAdmin = document.getElementById('panel-admin');
+                        const qrBox = document.getElementById('qrcode-box');
 
                         if (data.connected) {
-                            statusCard.innerHTML = \`
-                                <h1 style="color: #4ade80;">✅ Bot Conectado y Activo</h1>
-                                <p style="margin: 0; color: #94a3b8;">Gestiona las opciones de tu bot en tiempo real desde este panel.</p>
-                            \`;
+                            statusText.innerHTML = '<b style="color:#4ade80; font-size: 1.2em;">✅ Bot Conectado y Activo</b>';
+                            qrBox.innerHTML = '';
                             panelAdmin.style.display = 'block';
+                            lastQRValue = '';
                             cargarComandosUI();
                         } else if (data.qr) {
                             panelAdmin.style.display = 'none';
-                            statusCard.innerHTML = \`
-                                <h1>💙 AnubisTV Bot 💙</h1>
-                                <p>Escanea este código QR con WhatsApp para vincular:</p>
-                                <img src="\${data.qr}" alt="Código QR" width="230" height="230" />
-                                <p style="font-size: 12px; color: #94a3b8; margin-top: 15px;">🔄 Se actualiza automáticamente.</p>
-                            \`;
+                            statusText.innerText = 'Escanea este código QR desde WhatsApp:';
+                            
+                            if (lastQRValue !== data.qr) {
+                                lastQRValue = data.qr;
+                                qrBox.innerHTML = '';
+                                new QRCode(qrBox, {
+                                    text: data.qr,
+                                    width: 230,
+                                    height: 230
+                                });
+                            }
                         } else {
                             panelAdmin.style.display = 'none';
-                            statusCard.innerHTML = \`
-                                <h1>⌛ Generando QR...</h1>
-                                <p>Cargando código QR de WhatsApp...</p>
-                            \`;
+                            statusText.innerText = '⌛ Conectando con WhatsApp... (Espere unos segundos)';
+                            qrBox.innerHTML = '';
+                            lastQRValue = '';
                         }
                     } catch (err) {
-                        console.error('Error al verificar estado:', err);
+                        console.error('Error:', err);
                     }
                 }
 
@@ -187,7 +201,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/estado', (req, res) => {
-    res.json({ connected: botConectado, qr: qrCodeImage });
+    res.json({ connected: botConectado, qr: rawQR });
 });
 
 app.get('/api/comandos', (req, res) => {
@@ -214,45 +228,45 @@ app.listen(PORT, () => console.log(`🌐 Servidor Web activo en el puerto ${PORT
 
 // ==================== LÓGICA DEL BOT ====================
 async function iniciarBot() {
-    console.log('🔄 Iniciando motor de Baileys...');
-    const { state, saveCreds } = await useMultiFileAuthState('sesion_whatsapp');
+    console.log('🔄 Inicializando sesión Baileys...');
+    
+    const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
 
     const sock = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
         printQRInTerminal: false,
-        browser: ['Mac OS', 'Chrome', '121.0.0'],
-        webSocketFactory: (url) => new WebSocket(url)
+        browser: ['AnubisTV-Server', 'Chrome', '1.0.0']
     });
 
     sock.ev.on('creds.update', saveCreds);
 
-    sock.ev.on('connection.update', async (update) => {
+    sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
-            console.log('⚡ ¡Código QR recibido! Generando imagen web...');
+            console.log('⚡ ¡QR Recibido desde Baileys!');
             botConectado = false;
-            qrCodeImage = await QRCode.toDataURL(qr);
+            rawQR = qr;
         }
 
         if (connection === 'close') {
             botConectado = false;
+            rawQR = '';
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const causaCierreSesion = statusCode === DisconnectReason.loggedOut;
 
             if (causaCierreSesion) {
-                console.log('⚠️ Sesión cerrada. Limpiando credenciales...');
-                qrCodeImage = '';
-                if (fs.existsSync('sesion_whatsapp')) {
-                    fs.rmSync('sesion_whatsapp', { recursive: true, force: true });
+                console.log('⚠️ Sesión terminada. Limpiando datos...');
+                if (fs.existsSync(SESSION_DIR)) {
+                    fs.rmSync(SESSION_DIR, { recursive: true, force: true });
                 }
             }
-            console.log('📡 Reconectando en 3 segundos...');
+            console.log('📡 Reconectando...');
             setTimeout(iniciarBot, 3000);
         } else if (connection === 'open') {
             botConectado = true;
-            qrCodeImage = '';
+            rawQR = '';
             console.log('✅ Bot de AnubisTV conectado con éxito a WhatsApp');
         }
     });
@@ -289,13 +303,13 @@ async function iniciarBot() {
                     });
 
                 } catch (err) {
-                    console.error('Error al enviar bienvenida:', err);
+                    console.error('Error bienvenida:', err);
                 }
             }
         }
     });
 
-    // Procesador de comandos
+    // Lectura de comandos
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
 
@@ -345,11 +359,11 @@ async function iniciarBot() {
                 }
 
             } catch (err) {
-                console.error('Error al ejecutar comando de admin:', err);
+                console.error('Error comando admin:', err);
             }
         }
     });
 }
 
-// Arrancar Bot
+// Iniciar ejecuciones
 iniciarBot();
