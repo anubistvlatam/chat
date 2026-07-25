@@ -4,6 +4,7 @@ const fs = require('fs');
 const axios = require('axios');
 const express = require('express');
 const QRCode = require('qrcode');
+const WebSocket = require('ws');
 
 // ==================== MANEJO DE COMANDOS GUARDADOS ====================
 const ARCHIVO_COMANDOS = 'comandos_custom.json';
@@ -33,7 +34,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 let qrCodeImage = '';
 let botConectado = false;
-let ultimoError = '';
 
 app.use(express.json());
 
@@ -59,7 +59,6 @@ app.get('/', (req, res) => {
                 .btn-danger:hover { background: #dc2626; }
                 .item-cmd { background: #334155; padding: 15px; border-radius: 8px; margin-bottom: 10px; text-align: left; display: flex; justify-content: space-between; align-items: center; white-space: pre-wrap; }
                 .cmd-name { font-weight: bold; color: #4ade80; font-size: 1.1em; }
-                .error-box { background: #7f1d1d; color: #fca5a5; padding: 10px; border-radius: 8px; font-size: 0.85em; margin-top: 15px; }
             </style>
         </head>
         <body>
@@ -113,11 +112,9 @@ app.get('/', (req, res) => {
                             \`;
                         } else {
                             panelAdmin.style.display = 'none';
-                            let htmlErr = data.error ? \`<div class="error-box"><b>Diagnóstico:</b> \${data.error}</div>\` : '';
                             statusCard.innerHTML = \`
                                 <h1>⌛ Generando QR...</h1>
-                                <p>Iniciando sesión con los servidores de WhatsApp...</p>
-                                \${htmlErr}
+                                <p>Cargando código QR de WhatsApp...</p>
                             \`;
                         }
                     } catch (err) {
@@ -181,7 +178,7 @@ app.get('/', (req, res) => {
                     }
                 }
 
-                setInterval(checkStatus, 3000);
+                setInterval(checkStatus, 2000);
                 checkStatus();
             </script>
         </body>
@@ -190,7 +187,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/estado', (req, res) => {
-    res.json({ connected: botConectado, qr: qrCodeImage, error: ultimoError });
+    res.json({ connected: botConectado, qr: qrCodeImage });
 });
 
 app.get('/api/comandos', (req, res) => {
@@ -213,158 +210,146 @@ app.delete('/api/comandos', (req, res) => {
     res.json({ success: true });
 });
 
-app.listen(PORT, () => console.log(`🌐 Servidor activo en el puerto ${PORT}`));
+app.listen(PORT, () => console.log(`🌐 Servidor Web activo en el puerto ${PORT}`));
 
 // ==================== LÓGICA DEL BOT ====================
 async function iniciarBot() {
-    try {
-        const { state, saveCreds } = await useMultiFileAuthState('sesion_whatsapp');
+    console.log('🔄 Iniciando motor de Baileys...');
+    const { state, saveCreds } = await useMultiFileAuthState('sesion_whatsapp');
 
-        const sock = makeWASocket({
-            logger: pino({ level: 'silent' }),
-            auth: state,
-            printQRInTerminal: false,
-            browser: ['Ubuntu', 'Chrome', '20.0.04'],
-            connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 60000,
-            keepAliveIntervalMs: 25000
-        });
+    const sock = makeWASocket({
+        logger: pino({ level: 'silent' }),
+        auth: state,
+        printQRInTerminal: false,
+        browser: ['Mac OS', 'Chrome', '121.0.0'],
+        webSocketFactory: (url) => new WebSocket(url)
+    });
 
-        sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('creds.update', saveCreds);
 
-        sock.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect, qr } = update;
+    sock.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect, qr } = update;
 
-            if (qr) {
-                botConectado = false;
-                qrCodeImage = await QRCode.toDataURL(qr);
-                ultimoError = '';
-                console.log('📱 ¡QR generado exitosamente!');
-            }
+        if (qr) {
+            console.log('⚡ ¡Código QR recibido! Generando imagen web...');
+            botConectado = false;
+            qrCodeImage = await QRCode.toDataURL(qr);
+        }
 
-            if (connection === 'close') {
-                botConectado = false;
-                const statusCode = lastDisconnect?.error?.output?.statusCode;
-                const causaCierreSesion = statusCode === DisconnectReason.loggedOut;
-                
-                ultimoError = `Desconectado (Código: ${statusCode || 'Desconocido'})`;
+        if (connection === 'close') {
+            botConectado = false;
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            const causaCierreSesion = statusCode === DisconnectReason.loggedOut;
 
-                if (causaCierreSesion) {
-                    console.log('⚠️ Sesión cerrada. Limpiando credenciales...');
-                    qrCodeImage = '';
-                    if (fs.existsSync('sesion_whatsapp')) {
-                        fs.rmSync('sesion_whatsapp', { recursive: true, force: true });
-                    }
-                    setTimeout(iniciarBot, 3000);
-                } else {
-                    console.log('📡 Reconectando con WhatsApp...');
-                    setTimeout(iniciarBot, 3000);
-                }
-            } else if (connection === 'open') {
-                botConectado = true;
+            if (causaCierreSesion) {
+                console.log('⚠️ Sesión cerrada. Limpiando credenciales...');
                 qrCodeImage = '';
-                ultimoError = '';
-                console.log('✅ Bot conectado con éxito');
-            }
-        });
-
-        // Bienvenida a nuevos miembros
-        sock.ev.on('group-participants.update', async (update) => {
-            const { id, participants, action } = update;
-
-            if (action === 'add') {
-                for (const usuarioJid of participants) {
-                    try {
-                        const usuarioTag = `@${usuarioJid.split('@')[0]}`;
-                        const mensajeBienvenida = `¡Hola ${usuarioTag}! 👋\n\n` +
-                        `✨ *Bienvenido a AnubisTV* ✨\n\n` +
-                        `📜 *Reglas del grupo:*\n` +
-                        `1️⃣ No insultar y respetar a cada miembro del grupo.\n` +
-                        `2️⃣ Si tienen fallas con la cuenta, mandar msj en privado.\n\n` +
-                        `Escribe *.stock* o *.combos* para ver nuestro catálogo. 🍿💙`;
-
-                        let ppUrl;
-                        try {
-                            ppUrl = await sock.profilePictureUrl(usuarioJid, 'image');
-                        } catch (e) {
-                            ppUrl = 'https://i.imgur.com/39a3N9e.png';
-                        }
-
-                        const response = await axios.get(ppUrl, { responseType: 'arraybuffer' });
-                        const imageBuffer = Buffer.from(response.data, 'binary');
-
-                        await sock.sendMessage(id, {
-                            image: imageBuffer,
-                            caption: mensajeBienvenida,
-                            mentions: [usuarioJid]
-                        });
-
-                    } catch (err) {
-                        console.error('Error bienvenida:', err);
-                    }
+                if (fs.existsSync('sesion_whatsapp')) {
+                    fs.rmSync('sesion_whatsapp', { recursive: true, force: true });
                 }
             }
-        });
+            console.log('📡 Reconectando en 3 segundos...');
+            setTimeout(iniciarBot, 3000);
+        } else if (connection === 'open') {
+            botConectado = true;
+            qrCodeImage = '';
+            console.log('✅ Bot de AnubisTV conectado con éxito a WhatsApp');
+        }
+    });
 
-        // Comandos de mensajes
-        sock.ev.on('messages.upsert', async ({ messages, type }) => {
-            if (type !== 'notify') return;
+    // Bienvenida a nuevos miembros
+    sock.ev.on('group-participants.update', async (update) => {
+        const { id, participants, action } = update;
 
-            const msg = messages[0];
-            if (!msg.message) return;
-
-            const from = msg.key.remoteJid;
-            const isGroup = from.endsWith('@g.us');
-
-            const texto = msg.message.conversation ||
-            msg.message.extendedTextMessage?.text || '';
-
-            const comando = texto.trim().toLowerCase();
-
-            const comandosDB = cargarComandos();
-            if (comandosDB[comando]) {
-                await sock.sendMessage(from, { text: comandosDB[comando] }, { quoted: msg });
-                return;
-            }
-
-            if (isGroup && (comando === '.cerrar' || comando === '.abrir')) {
+        if (action === 'add') {
+            for (const usuarioJid of participants) {
                 try {
-                    const groupMetadata = await sock.groupMetadata(from);
-                    const participants = groupMetadata.participants;
-                    const sender = msg.key.participant || msg.key.remoteJid;
+                    const usuarioTag = `@${usuarioJid.split('@')[0]}`;
+                    const mensajeBienvenida = `¡Hola ${usuarioTag}! 👋\n\n` +
+                    `✨ *Bienvenido a AnubisTV* ✨\n\n` +
+                    `📜 *Reglas del grupo:*\n` +
+                    `1️⃣ No insultar y respetar a cada miembro del grupo.\n` +
+                    `2️⃣ Si tienen fallas con la cuenta, mandar msj en privado.\n\n` +
+                    `Escribe *.stock* o *.combos* para ver nuestro catálogo. 🍿💙`;
 
-                    const senderClean = sender.split(':')[0].split('@')[0];
+                    let ppUrl;
+                    try {
+                        ppUrl = await sock.profilePictureUrl(usuarioJid, 'image');
+                    } catch (e) {
+                        ppUrl = 'https://i.imgur.com/39a3N9e.png';
+                    }
 
-                    const esAdmin = participants.some(p => {
-                        const participantClean = p.id.split(':')[0].split('@')[0];
-                        return participantClean === senderClean && (p.admin === 'admin' || p.admin === 'superadmin');
+                    const response = await axios.get(ppUrl, { responseType: 'arraybuffer' });
+                    const imageBuffer = Buffer.from(response.data, 'binary');
+
+                    await sock.sendMessage(id, {
+                        image: imageBuffer,
+                        caption: mensajeBienvenida,
+                        mentions: [usuarioJid]
                     });
 
-                    if (!esAdmin) {
-                        await sock.sendMessage(from, { text: '❌ Solo administradores pueden usar este comando.' }, { quoted: msg });
-                        return;
-                    }
-
-                    if (comando === '.cerrar') {
-                        await sock.groupSettingUpdate(from, 'announcement');
-                        await sock.sendMessage(from, { text: '🔒 *Grupo cerrado.*' });
-                    }
-
-                    if (comando === '.abrir') {
-                        await sock.groupSettingUpdate(from, 'not_announcement');
-                        await sock.sendMessage(from, { text: '🔓 *Grupo abierto.*' });
-                    }
-
                 } catch (err) {
-                    console.error('Error comando admin:', err);
+                    console.error('Error al enviar bienvenida:', err);
                 }
             }
-        });
-    } catch (error) {
-        console.error('Error fatal en iniciarBot:', error);
-        ultimoError = error.message;
-        setTimeout(iniciarBot, 5000);
-    }
+        }
+    });
+
+    // Procesador de comandos
+    sock.ev.on('messages.upsert', async ({ messages, type }) => {
+        if (type !== 'notify') return;
+
+        const msg = messages[0];
+        if (!msg.message) return;
+
+        const from = msg.key.remoteJid;
+        const isGroup = from.endsWith('@g.us');
+
+        const texto = msg.message.conversation ||
+        msg.message.extendedTextMessage?.text || '';
+
+        const comando = texto.trim().toLowerCase();
+
+        const comandosDB = cargarComandos();
+        if (comandosDB[comando]) {
+            await sock.sendMessage(from, { text: comandosDB[comando] }, { quoted: msg });
+            return;
+        }
+
+        if (isGroup && (comando === '.cerrar' || comando === '.abrir')) {
+            try {
+                const groupMetadata = await sock.groupMetadata(from);
+                const participants = groupMetadata.participants;
+                const sender = msg.key.participant || msg.key.remoteJid;
+
+                const senderClean = sender.split(':')[0].split('@')[0];
+
+                const esAdmin = participants.some(p => {
+                    const participantClean = p.id.split(':')[0].split('@')[0];
+                    return participantClean === senderClean && (p.admin === 'admin' || p.admin === 'superadmin');
+                });
+
+                if (!esAdmin) {
+                    await sock.sendMessage(from, { text: '❌ *Acceso denegado:* Solo administradores pueden usar este comando.' }, { quoted: msg });
+                    return;
+                }
+
+                if (comando === '.cerrar') {
+                    await sock.groupSettingUpdate(from, 'announcement');
+                    await sock.sendMessage(from, { text: '🔒 *Grupo cerrado.* Solo administradores pueden enviar mensajes.' });
+                }
+
+                if (comando === '.abrir') {
+                    await sock.groupSettingUpdate(from, 'not_announcement');
+                    await sock.sendMessage(from, { text: '🔓 *Grupo abierto.* Todos los miembros pueden enviar mensajes.' });
+                }
+
+            } catch (err) {
+                console.error('Error al ejecutar comando de admin:', err);
+            }
+        }
+    });
 }
 
+// Arrancar Bot
 iniciarBot();
