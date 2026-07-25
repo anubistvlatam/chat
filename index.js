@@ -1,6 +1,5 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const pino = require('pino');
-const qrcodeTerminal = require('qrcode-terminal');
 const fs = require('fs');
 const axios = require('axios');
 const express = require('express');
@@ -29,11 +28,12 @@ function guardarComandosBD(comandos) {
     fs.writeFileSync(ARCHIVO_COMANDOS, JSON.stringify(comandos, null, 2));
 }
 
-// ==================== SERVIDOR WEB & PANEL ====================
+// ==================== SERVIDOR WEB ====================
 const app = express();
 const PORT = process.env.PORT || 3000;
 let qrCodeImage = '';
 let botConectado = false;
+let ultimoError = '';
 
 app.use(express.json());
 
@@ -59,6 +59,7 @@ app.get('/', (req, res) => {
                 .btn-danger:hover { background: #dc2626; }
                 .item-cmd { background: #334155; padding: 15px; border-radius: 8px; margin-bottom: 10px; text-align: left; display: flex; justify-content: space-between; align-items: center; white-space: pre-wrap; }
                 .cmd-name { font-weight: bold; color: #4ade80; font-size: 1.1em; }
+                .error-box { background: #7f1d1d; color: #fca5a5; padding: 10px; border-radius: 8px; font-size: 0.85em; margin-top: 15px; }
             </style>
         </head>
         <body>
@@ -112,9 +113,11 @@ app.get('/', (req, res) => {
                             \`;
                         } else {
                             panelAdmin.style.display = 'none';
+                            let htmlErr = data.error ? \`<div class="error-box"><b>Diagnóstico:</b> \${data.error}</div>\` : '';
                             statusCard.innerHTML = \`
                                 <h1>⌛ Generando QR...</h1>
-                                <p>Generando credenciales y conectando con WhatsApp...</p>
+                                <p>Iniciando sesión con los servidores de WhatsApp...</p>
+                                \${htmlErr}
                             \`;
                         }
                     } catch (err) {
@@ -187,7 +190,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/estado', (req, res) => {
-    res.json({ connected: botConectado, qr: qrCodeImage });
+    res.json({ connected: botConectado, qr: qrCodeImage, error: ultimoError });
 });
 
 app.get('/api/comandos', (req, res) => {
@@ -210,9 +213,9 @@ app.delete('/api/comandos', (req, res) => {
     res.json({ success: true });
 });
 
-app.listen(PORT, () => console.log(`🌐 Servidor y Panel Web activos en puerto ${PORT}`));
+app.listen(PORT, () => console.log(`🌐 Servidor activo en el puerto ${PORT}`));
 
-// ==================== LÓGICA PRINCIPAL BOT ====================
+// ==================== LÓGICA DEL BOT ====================
 async function iniciarBot() {
     try {
         const { state, saveCreds } = await useMultiFileAuthState('sesion_whatsapp');
@@ -221,7 +224,10 @@ async function iniciarBot() {
             logger: pino({ level: 'silent' }),
             auth: state,
             printQRInTerminal: false,
-            browser: ['AnubisTV Bot', 'Chrome', '1.0.0']
+            browser: ['Ubuntu', 'Chrome', '20.0.04'],
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000,
+            keepAliveIntervalMs: 25000
         });
 
         sock.ev.on('creds.update', saveCreds);
@@ -232,13 +238,16 @@ async function iniciarBot() {
             if (qr) {
                 botConectado = false;
                 qrCodeImage = await QRCode.toDataURL(qr);
-                console.log('📱 ¡Nuevo QR generado y disponible en el panel Web!');
+                ultimoError = '';
+                console.log('📱 ¡QR generado exitosamente!');
             }
 
             if (connection === 'close') {
                 botConectado = false;
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const causaCierreSesion = statusCode === DisconnectReason.loggedOut;
+                
+                ultimoError = `Desconectado (Código: ${statusCode || 'Desconocido'})`;
 
                 if (causaCierreSesion) {
                     console.log('⚠️ Sesión cerrada. Limpiando credenciales...');
@@ -254,7 +263,8 @@ async function iniciarBot() {
             } else if (connection === 'open') {
                 botConectado = true;
                 qrCodeImage = '';
-                console.log('✅ Bot de AnubisTV conectado con éxito');
+                ultimoError = '';
+                console.log('✅ Bot conectado con éxito');
             }
         });
 
@@ -290,13 +300,13 @@ async function iniciarBot() {
                         });
 
                     } catch (err) {
-                        console.error('Error al enviar bienvenida:', err);
+                        console.error('Error bienvenida:', err);
                     }
                 }
             }
         });
 
-        // Mensajes y comandos
+        // Comandos de mensajes
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             if (type !== 'notify') return;
 
@@ -311,14 +321,12 @@ async function iniciarBot() {
 
             const comando = texto.trim().toLowerCase();
 
-            // Respuesta desde JSON
             const comandosDB = cargarComandos();
             if (comandosDB[comando]) {
                 await sock.sendMessage(from, { text: comandosDB[comando] }, { quoted: msg });
                 return;
             }
 
-            // Comandos .cerrar y .abrir
             if (isGroup && (comando === '.cerrar' || comando === '.abrir')) {
                 try {
                     const groupMetadata = await sock.groupMetadata(from);
@@ -333,18 +341,18 @@ async function iniciarBot() {
                     });
 
                     if (!esAdmin) {
-                        await sock.sendMessage(from, { text: '❌ *Acceso denegado:* Solo administradores pueden usar este comando.' }, { quoted: msg });
+                        await sock.sendMessage(from, { text: '❌ Solo administradores pueden usar este comando.' }, { quoted: msg });
                         return;
                     }
 
                     if (comando === '.cerrar') {
                         await sock.groupSettingUpdate(from, 'announcement');
-                        await sock.sendMessage(from, { text: '🔒 *Grupo cerrado.* Solo administradores pueden enviar mensajes.' });
+                        await sock.sendMessage(from, { text: '🔒 *Grupo cerrado.*' });
                     }
 
                     if (comando === '.abrir') {
                         await sock.groupSettingUpdate(from, 'not_announcement');
-                        await sock.sendMessage(from, { text: '🔓 *Grupo abierto.* Todos los miembros pueden enviar mensajes.' });
+                        await sock.sendMessage(from, { text: '🔓 *Grupo abierto.*' });
                     }
 
                 } catch (err) {
@@ -353,10 +361,10 @@ async function iniciarBot() {
             }
         });
     } catch (error) {
-        console.error('Error en iniciarBot:', error);
+        console.error('Error fatal en iniciarBot:', error);
+        ultimoError = error.message;
         setTimeout(iniciarBot, 5000);
     }
 }
 
-// Iniciar bot explícitamente
 iniciarBot();
