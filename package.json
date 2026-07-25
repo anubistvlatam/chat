@@ -1,0 +1,17 @@
+{
+  "name": "bot-anubistv",
+  "version": "1.0.0",
+  "description": "Bot de WhatsApp para AnubisTV",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.12",
+    "axios": "^1.7.9",
+    "express": "^4.21.2",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
