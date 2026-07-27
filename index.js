@@ -4,6 +4,10 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const express = require('express');
+const multer = require('multer');
+
+// Configuración para recibir archivos en memoria desde el navegador
+const upload = multer({ storage: multer.memoryStorage() });
 
 // ==================== DIRECTORIOS ====================
 const SESSION_DIR = path.join(__dirname, 'sesion_whatsapp');
@@ -31,8 +35,6 @@ function cargarComandos() {
     try {
         const rawData = fs.readFileSync(ARCHIVO_COMANDOS, 'utf-8');
         const parsed = JSON.parse(rawData);
-        
-        // Compatibilidad hacia atrás si antes solo era texto simple
         const estandarizado = {};
         for (const [key, value] of Object.entries(parsed)) {
             if (typeof value === 'string') {
@@ -79,6 +81,7 @@ app.get('/', (req, res) => {
                 #qrcode-box img, #qrcode-box canvas { border-radius: 12px; border: 4px solid #38bdf8; padding: 10px; background: white; }
                 .code-display { font-size: 2.2em; font-weight: bold; letter-spacing: 5px; color: #4ade80; background: #0f172a; padding: 15px; border-radius: 10px; border: 2px dashed #4ade80; margin: 15px 0; display: inline-block; }
                 input, textarea { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; font-family: inherit; }
+                input[type="file"] { background: #334155; cursor: pointer; }
                 textarea { height: 120px; resize: vertical; }
                 button { background: #0284c7; color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
                 button:hover { background: #0369a1; }
@@ -108,13 +111,13 @@ app.get('/', (req, res) => {
                         <label>Comando (ej: .publicidad, .stock, .combo):</label>
                         <input type="text" id="cmd-key" placeholder=".publicidad" />
                         
-                        <label>URL de Imagen (Opcional):</label>
-                        <input type="text" id="cmd-img" placeholder="https://ejemplo.com/imagen.jpg (Deja en blanco si es solo texto)" />
+                        <label>Subir Imagen desde PC/Móvil (Opcional):</label>
+                        <input type="file" id="cmd-file" accept="image/*" />
 
                         <label>Respuesta o Pie de Imagen:</label>
-                        <textarea id="cmd-value" placeholder="Escribe aquí el mensaje o la descripción que acompañará a la imagen..."></textarea>
+                        <textarea id="cmd-value" placeholder="Escribe aquí el mensaje o pie de imagen..."></textarea>
                         
-                        <button onclick="guardarComando()">💾 Guardar Comando</button>
+                        <button id="btn-save" onclick="guardarComando()">💾 Guardar Comando</button>
                     </div>
 
                     <div class="card">
@@ -216,29 +219,51 @@ app.get('/', (req, res) => {
 
                 async function guardarComando() {
                     const key = document.getElementById('cmd-key').value.trim();
-                    const imagen = document.getElementById('cmd-img').value.trim();
                     const texto = document.getElementById('cmd-value').value;
+                    const fileInput = document.getElementById('cmd-file');
+                    const btn = document.getElementById('btn-save');
 
                     if (!key.startsWith('.')) {
                         alert('El comando debe comenzar con punto (.) Ej: .publicidad');
                         return;
                     }
-                    if (!texto && !imagen) {
-                        alert('Escribe un texto o coloca la URL de una imagen.');
+                    if (!texto && fileInput.files.length === 0) {
+                        alert('Escribe un texto o selecciona una imagen.');
                         return;
                     }
 
-                    await fetch('/api/comandos', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ key, texto, imagen })
-                    });
+                    btn.innerText = '⏳ Subiendo y guardando...';
+                    btn.disabled = true;
 
-                    document.getElementById('cmd-key').value = '';
-                    document.getElementById('cmd-img').value = '';
-                    document.getElementById('cmd-value').value = '';
-                    cargarComandosUI();
-                    alert('✅ Comando ' + key + ' guardado exitosamente.');
+                    const formData = new FormData();
+                    formData.append('key', key);
+                    formData.append('texto', texto);
+                    if (fileInput.files.length > 0) {
+                        formData.append('imagen', fileInput.files[0]);
+                    }
+
+                    try {
+                        const res = await fetch('/api/comandos', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const data = await res.json();
+
+                        if (data.success) {
+                            document.getElementById('cmd-key').value = '';
+                            document.getElementById('cmd-value').value = '';
+                            document.getElementById('cmd-file').value = '';
+                            cargarComandosUI();
+                            alert('✅ Comando ' + key + ' guardado exitosamente.');
+                        } else {
+                            alert('⚠️ Error al guardar el comando.');
+                        }
+                    } catch (err) {
+                        alert('Error en la solicitud: ' + err.message);
+                    } finally {
+                        btn.innerText = '💾 Guardar Comando';
+                        btn.disabled = false;
+                    }
                 }
 
                 async function eliminarComando(key) {
@@ -286,12 +311,33 @@ app.get('/api/comandos', (req, res) => {
     res.json(cargarComandos());
 });
 
-app.post('/api/comandos', (req, res) => {
-    const { key, texto, imagen } = req.body;
-    const comandos = cargarComandos();
-    comandos[key.toLowerCase()] = { texto, imagen: imagen || "" };
-    guardarComandosBD(comandos);
-    res.json({ success: true });
+// Endpoint para guardar comandos con archivo subido
+app.post('/api/comandos', upload.single('imagen'), async (req, res) => {
+    try {
+        const { key, texto } = req.body;
+        const comandos = cargarComandos();
+        let imageUrl = comandos[key.toLowerCase()]?.imagen || "";
+
+        // Si se subió un archivo desde PC o móvil, subirlo a Imgur
+        if (req.file) {
+            const base64Img = req.file.buffer.toString('base64');
+            const imgurRes = await axios.post('https://api.imgur.com/3/image', 
+                { image: base64Img, type: 'base64' }, 
+                { headers: { Authorization: 'Client-ID 13915f79590e8ed' } }
+            );
+            
+            if (imgurRes.data && imgurRes.data.data && imgurRes.data.data.link) {
+                imageUrl = imgurRes.data.data.link;
+            }
+        }
+
+        comandos[key.toLowerCase()] = { texto, imagen: imageUrl };
+        guardarComandosBD(comandos);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Error al subir imagen:', err.message);
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 app.delete('/api/comandos', (req, res) => {
@@ -409,11 +455,9 @@ async function iniciarBot() {
 
         const comandosDB = cargarComandos();
         
-        // 1. Ejecución de comandos guardados
         if (comandosDB[comando]) {
             const configCmd = comandosDB[comando];
 
-            // Si el comando tiene URL de imagen configurada
             if (configCmd.imagen && configCmd.imagen.trim() !== '') {
                 try {
                     const response = await axios.get(configCmd.imagen, { responseType: 'arraybuffer' });
@@ -425,19 +469,16 @@ async function iniciarBot() {
                     }, { quoted: msg });
                     return;
                 } catch (err) {
-                    console.error('Error al descargar imagen del comando, enviando solo texto:', err.message);
-                    // Si la imagen falla por alguna razón, envía solo el texto
+                    console.error('Error enviando imagen:', err.message);
                     await sock.sendMessage(from, { text: configCmd.texto }, { quoted: msg });
                     return;
                 }
             } else {
-                // Si no tiene imagen, envía texto normal
                 await sock.sendMessage(from, { text: configCmd.texto }, { quoted: msg });
                 return;
             }
         }
 
-        // 2. Comandos de Administración
         if (isGroup && (comando === '.cerrar' || comando === '.abrir')) {
             try {
                 const groupMetadata = await sock.groupMetadata(from);
