@@ -6,8 +6,11 @@ const axios = require('axios');
 const express = require('express');
 const multer = require('multer');
 
-// Configuración de carga de archivos en memoria
-const upload = multer({ storage: multer.memoryStorage() });
+// Configuración de almacenamiento para fotos directas (máximo 10MB)
+const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 }
+});
 
 // ==================== DIRECTORIOS ====================
 const SESSION_DIR = path.join(__dirname, 'sesion_whatsapp');
@@ -20,11 +23,11 @@ const ARCHIVO_COMANDOS = path.join(__dirname, 'comandos_custom.json');
 if (!fs.existsSync(ARCHIVO_COMANDOS)) {
     const comandosIniciales = {
         ".stock": {
-            texto: `╭────────────────────────────╮\n💙 ✦ AnubisTV ✦ 💙\n✨ 𝗦𝗧𝗢𝗖𝗞 𝗗𝗜𝗦𝗣𝗢𝗡𝗜𝗕𝗟𝗘 ✨\n╰────────────────────────────╯\n✨ Cuentas disponibles\n⚡ Entrega rápida\n🤝 Atención personalizada\n⚠️ Consulta disponibilidad antes de realizar tu pago.\n🚫 No se realizan reembolsos.\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🎬 𝗦𝗧𝗥𝗘𝗔𝗠𝗜𝗡𝗚 :･ﾟ✧ ⋆⋅☆⋅⋆\n❤️ NETFLIX\n▸ 👤 Perfil $55\n▸ 👥 Completa $230\n💙 PRIME VIDEO\n▸ 👤 Perfil $20\n▸ 👥 Completa $45\n🩵 PARAMOUNT+\n▸ 👤 Perfil $17\n▸ 👥 Completa $45\n💙 DISNEY+\n▸ 👤 Perfil $22\n▸ 👥 Completa $70\n💜 MAX PLATINO\n▸ 👤 Perfil $21\n▸ 👥 Completa $55\n🧡 CRUNCHYROLL\n▸ 👤 Perfil $15\n▸ 👥 Completa $45\n🧡 VIX (Mensual)\n▸ 👤 Perfil $11\n▸ 👥 Completa $20\n🧡 VIX (Anual)\n▸ 👤 Perfil $15\n▸ 👥 Completa $30\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🎵 𝗠𝗨́𝗦𝗜𝗖𝗔 :･ﾟ✧ ⋆⋅☆⋅⋆\n💚 SPOTIFY PREMIUM\n▸ 1 Mes $40\n▸ 3 Meses $85\n❤️ YOUTUBE PREMIUM\n▸ Invitación $25\n▸ Familiar (tus datos) $45\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🛠️ 𝗔𝗣𝗣𝗦 & 𝗛𝗘𝗥𝗥𝗔𝗠𝗜𝗘𝗡𝗧𝗔𝗦 :･ﾟ✧ ⋆⋅☆⋅⋆\n💜 CANVA PRO\n▸ 1 Mes $25\n▸ 3 Meses $50\n▸ 6 Meses $70\n▸ Anual $90\n💼 MICROSOFT 365\n▸ 1 Mes $25\n▸ 2 Meses $50\n▸ 6 Meses $90\n📦 OTROS SERVICIOS\n🦉 Duolingo $35\n🎧 Deezer $35\n🔞 Pornhub $45\n🎵 Tidal $35\n👨‍👩‍👧‍👦 Tidal Familiar $45\n🎬 Mubi $35\n👨‍👩‍👧‍👦 Mubi Familiar $45\n🎥 Universal+ $35\n📺 Fox One $35\n🍎 Apple TV $35\n\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 💙 AnubisTV 💙 :･ﾟ✧ ⋆⋅☆⋅⋆\n✨ Calidad • Confianza • Rapidez\n💬 ¡Gracias por tu preferencia!\n\n┊💫 Streaming AnubisTV 💫 ┊`,
+            texto: `╭────────────────────────────╮\n💙 ✦ AnubisTV ✦ 💙\n✨ 𝗦𝗧𝗢𝗖𝗞 𝗗𝗜𝗦𝗣𝗢𝗡𝗜𝗕𝗟𝗘 ✨\n╰────────────────────────────╯\n✨ Cuentas disponibles\n⚡ Entrega rápida\n🤝 Atención personalizada\n⚠️ Consulta disponibilidad antes de realizar tu pago.\n🚫 No se realizan reembolsos.\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🎬 𝗦𝗧𝗥𝗘𝗔𝗠𝗜𝗡𝗚 :･ﾟ✧ ⋆⋅☆⋅⋆\n❤️ NETFLIX\n▸ 👤 Perfil $55\n▸ 👥 Completa $230\n💙 PRIME VIDEO\n▸ 👤 Perfil $20\n▸ 👥 Completa $45\n🩵 PARAMOUNT+\n▸ 👤 Perfil $17\n▸ 👥 Completa $45\n💙 DISNEY+\n▸ 👤 Perfil $22\n▸ 👥 Completa $70\n💜 MAX PLATINO\n▸ 👤 Perfil $21\n▸ 👥 Completa $55\n🧡 CRUNCHYROLL\n▸ 👤 Perfil $15\n▸ 👥 Completa $45\n🧡 VIX (Mensual)\n▸ 👤 Perfil $11\n▸ 👥 Completa $20\n🧡 VIX (Anual)\n▸ 👤 Perfil $15\n▸ 👥 Completa $30\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🎵 𝗠𝗨́𝗦𝗜𝗖𝗔 :･ﾟ✧ ⋆⋅☆⋅⋆\n💚 SPOTIFY PREMIUM\n▸ 1 Mes $40\n▸ 3 Meses $85\n❤️ YOUTUBE PREMIUM\n▸ Invitación $25\n▸ Familiar (tus datos) $45\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🛠️ 𝗔𝗣𝗣𝗦 & 𝗛𝗘𝗥𝗥𝗔𝗠𝗜𝗘𝗡𝗧𝗔𝗦 :･ﾟ✧ ⋆⋅☆⋅⋆\n💜 CANVA PRO\n▸ 1 Mes $25\n▸ 3 Meses $50\n▸ 6 Meses $70\n▸ Anual $90\n💼 MICROSOFT 365\n▸ 1 Mes $25\n▸ 2 Meses $50\n▸ 6 Meses $90\n📦 OTROS SERVICIOS\n🦉 Duolingo $25\n🎧 Deezer $30\n🔞 Pornhub $30`,
             imagen: ""
         },
         ".combo": {
-            texto: `🎁 COMBOS\n💥 Ahorra más comprando en combo\n⚡ Entrega rápida\n✅ Stock disponible\n\n🥇 COMBO #1 | Más vendido\n❤️ Netflix\n💜 Max\n🧡 ViX\n💰 Precio: $80\n\n🥈 COMBO #2\n💙 Disney+\n💙 Prime Video\n🧡 Crunchyroll\n💰 Precio: $55\n\n🥉 COMBO #3\n❤️ Netflix\n💙 Disney+\n💙 Prime Video\n💰 Precio: $84\n\n🎬 COMBO #4\n💜 Max\n🩵 Paramount+\n🧡 ViX\n💰 Precio: $45\n\n🍿 COMBO #5\n💙 Disney+\n🩵 Paramount+\n🧡 ViX\n💰 Precio: $45\n\n🔥 COMBO #6\n❤️ Netflix\n💜 Max\n🧡 Crunchyroll\n💰 Precio: $80\n\n🎵 COMBO #7\n💚 Spotify Premium\n❤️ YouTube Premium\n💰 Precio: $70\n\n📺 COMBO #8\n💙 Prime Video\n🩵 Paramount+\n🧡 ViX\n💰 Precio: $43\n\n⭐ COMBO #9\n💙 Disney+\n💜 Max\n🧡 Crunchyroll\n💰 Precio: $55\n\n👑 COMBO #10 | Premium\n❤️ Netflix\n💙 Disney+\n💜 Max\n💙 Prime Video\n💰 Precio: $85\n\n`,
+            texto: `🎁 COMBOS\n💥 Ahorra más comprando en combo\n⚡ Entrega rápida\n✅ Stock disponible\n\n🥇 COMBO #1 | Más vendido\n❤️ Netflix\n💜 Max\n🧡 ViX\n💰 Precio: $80\n\n🥈 COMBO #2\n💙 Disney+\n💙 Prime Video\n🧡 Crunchyroll\n💰 Precio: $55\n\n🥉 COMBO #3\n❤️ Netflix\n💙 Disney+\n💙 Prime Video\n💰 Precio: $84\n\n🎬 COMBO #4\n💜 Max\n🩵 Paramount+\n🧡 ViX\n💰 Precio: $45\n\n🍿 COMBO #5\n💙 Disney+\n🩵 Paramount+\n🧡 ViX\n💰 Precio: $45\n\n🔥 COMBO #6\n❤️ Netflix\n💜 Max\n🧡 Crunchyroll\n💰 Precio: $80\n\n🎵 COMBO #7\n💚 Spotify Premium\n❤️ YouTube Premium\n💰 Precio: $70\n\n📺 COMBO #8\n💙 Prime Video\n🩵 Paramount+\n🧡 ViX\n💰 Precio: $43\n\n⭐ COMBO #9\n💙 Disney+\n💜 Max\n🧡 Crunchyroll\n💰 Precio: $55\n\n👑 COMBO #10 | Premium\n❤️ Netflix\n💙 Disney+\n💜 Max\n💙 Prime Video\n💰 Precio: $85\n\n🩵 💫 ANUBISTV 💫🩵 ┊\n🎵 Tidal $30\n👨‍👩‍👧‍👦 Tidal Familiar $45\n🎬 Mubi $30\n👨‍👩‍👧‍👦 Mubi Familiar $40\n🎥 Universal+ $25\n📺 Fox One $25\n🍎 Apple TV $30\n🍎 Apple TV (3 Meses) $50\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 💙 AnubisTV 💙 :･ﾟ✧ ⋆⋅☆⋅⋆\n✨ Calidad • Confianza • Rapidez\n💬 ¡Gracias por tu preferencia!\n\n┊💫 Streaming AnubisTV 💫 ┊`,
             imagen: ""
         }
     };
@@ -61,7 +64,7 @@ let pairingCode = '';
 let botConectado = false;
 let globalSock = null;
 
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
 
 app.get('/', (req, res) => {
     res.send(`
@@ -109,7 +112,7 @@ app.get('/', (req, res) => {
                 <div id="panel-admin" style="display: none;">
                     <div class="card" style="text-align: left;">
                         <h2>➕ Crear o Modificar Comando</h2>
-                        <label>Comando (ej: .publicidad, .stock, .combo):</label>
+                        <label>Comando (Ejemplo: .publicidad o .stock):</label>
                         <input type="text" id="cmd-key" placeholder=".publicidad" />
                         
                         <label>📁 Opción 1: Subir Foto desde Celular/PC (Opcional)</label>
@@ -224,16 +227,26 @@ app.get('/', (req, res) => {
                 }
 
                 async function guardarComando() {
-                    const key = document.getElementById('cmd-key').value.trim();
+                    let key = document.getElementById('cmd-key').value.trim();
                     const texto = document.getElementById('cmd-value').value;
                     const urlImg = document.getElementById('cmd-img-url').value.trim();
                     const fileInput = document.getElementById('cmd-file');
                     const btn = document.getElementById('btn-save');
 
-                    if (!key.startsWith('.')) {
-                        alert('El comando debe comenzar con punto (.) Ej: .publicidad');
+                    // Corrección automática si ponen ./comando o /comando
+                    if (key.startsWith('./')) {
+                        key = '.' + key.substring(2);
+                    } else if (key.startsWith('/')) {
+                        key = '.' + key.substring(1);
+                    } else if (!key.startsWith('.')) {
+                        key = '.' + key;
+                    }
+
+                    if (!key || key === '.') {
+                        alert('Escribe un nombre para el comando.');
                         return;
                     }
+
                     if (!texto && fileInput.files.length === 0 && !urlImg) {
                         alert('Escribe un texto o selecciona/pega una imagen.');
                         return;
@@ -265,7 +278,7 @@ app.get('/', (req, res) => {
                             cargarComandosUI();
                             alert('✅ Comando ' + key + ' guardado exitosamente.');
                         } else {
-                            alert('⚠️ Error al guardar el comando.');
+                            alert('⚠️ Error al guardar: ' + (data.error || 'Fallo desconocido'));
                         }
                     } catch (err) {
                         alert('Error en la solicitud: ' + err.message);
@@ -326,24 +339,18 @@ app.post('/api/comandos', upload.single('imagen'), async (req, res) => {
         const comandos = cargarComandos();
         let imageUrl = urlImagen || comandos[key.toLowerCase()]?.imagen || "";
 
-        // Si se sube archivo directo desde Celular/PC
+        // Si se subió un archivo desde PC/Móvil, lo convertimos a DataURL interno (Sin depender de Imgur)
         if (req.file) {
+            const mimeType = req.file.mimetype || 'image/jpeg';
             const base64Img = req.file.buffer.toString('base64');
-            const imgurRes = await axios.post('https://api.imgur.com/3/image', 
-                { image: base64Img, type: 'base64' }, 
-                { headers: { Authorization: 'Client-ID 13915f79590e8ed' } }
-            );
-            
-            if (imgurRes.data && imgurRes.data.data && imgurRes.data.data.link) {
-                imageUrl = imgurRes.data.data.link;
-            }
+            imageUrl = `data:${mimeType};base64,${base64Img}`;
         }
 
-        comandos[key.toLowerCase()] = { texto, imagen: imageUrl };
+        comandos[key.toLowerCase()] = { texto: texto || "", imagen: imageUrl };
         guardarComandosBD(comandos);
         res.json({ success: true });
     } catch (err) {
-        console.error('Error al subir imagen:', err.message);
+        console.error('Error al guardar comando:', err.message);
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -468,8 +475,17 @@ async function iniciarBot() {
 
             if (configCmd.imagen && configCmd.imagen.trim() !== '') {
                 try {
-                    const response = await axios.get(configCmd.imagen, { responseType: 'arraybuffer' });
-                    const imageBuffer = Buffer.from(response.data, 'binary');
+                    let imageBuffer;
+
+                    // Si la imagen es un DataURL de archivo subido
+                    if (configCmd.imagen.startsWith('data:image')) {
+                        const base64Data = configCmd.imagen.split(',')[1];
+                        imageBuffer = Buffer.from(base64Data, 'base64');
+                    } else {
+                        // Si es una URL de internet
+                        const response = await axios.get(configCmd.imagen, { responseType: 'arraybuffer' });
+                        imageBuffer = Buffer.from(response.data, 'binary');
+                    }
 
                     await sock.sendMessage(from, {
                         image: imageBuffer,
