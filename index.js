@@ -391,6 +391,7 @@ async function iniciarBot() {
             const botFuePromovido = participants.some(p => obtenerJidLimpio(p) === botJid);
 
             if (botFuePromovido) {
+                console.log(`🎉 Bot ascendido a Admin en el grupo: ${id}`);
                 await sock.sendMessage(id, {
                     text: `🤖 *BOT AnubiSystem ACTIVADO*\n\n¡Gracias por otorgarme el rango de Administrador!\nA partir de ahora estoy 100% activo para responder en este grupo. 🍿💙`
                 });
@@ -468,6 +469,19 @@ async function iniciarBot() {
         const from = msg.key.remoteJid;
         const isGroup = from.endsWith('@g.us');
 
+        const texto = msg.message.conversation ||
+                      msg.message.extendedTextMessage?.text || '';
+
+        const textoLimpio = texto.trim();
+        const comando = textoLimpio.toLowerCase();
+        const partes = textoLimpio.split(' ');
+        const primerComando = partes[0].toLowerCase();
+
+        // Si empieza con punto, registramos en consola
+        if (primerComando.startsWith('.')) {
+            console.log(`📩 Comando recibido: "${textoLimpio}" en grupo/chat: ${from}`);
+        }
+
         if (isGroup) {
             try {
                 const groupMetadata = await sock.groupMetadata(from);
@@ -477,19 +491,15 @@ async function iniciarBot() {
                     return pClean === botJid && (p.admin === 'admin' || p.admin === 'superadmin');
                 });
 
-                if (!botEsAdmin) return;
+                if (!botEsAdmin) {
+                    console.log(`⚠️ Ignorando comando "${primerComando}": El bot NO es administrador en este grupo.`);
+                    return;
+                }
             } catch (e) {
-                return;
+                console.error('⚠️ Error al verificar permisos de grupo:', e.message);
+                // Si la metadata de grupo falla momentáneamente, permitimos continuar
             }
         }
-
-        const texto = msg.message.conversation ||
-                      msg.message.extendedTextMessage?.text || '';
-
-        const textoLimpio = texto.trim();
-        const comando = textoLimpio.toLowerCase();
-        const partes = textoLimpio.split(' ');
-        const primerComando = partes[0].toLowerCase();
 
         // 1. COMANDO .CURP
         if (primerComando === '.curp') {
