@@ -6,13 +6,13 @@ const axios = require('axios');
 const express = require('express');
 const multer = require('multer');
 
-// Configuración de almacenamiento para fotos directas (máximo 10MB)
+// Configuración de almacenamiento en memoria para fotos subidas
 const upload = multer({ 
     storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-// ==================== DIRECTORIOS ====================
+// ==================== DIRECTORIOS Y CACHÉ ====================
 const SESSION_DIR = path.join(__dirname, 'sesion_whatsapp');
 if (!fs.existsSync(SESSION_DIR)) {
     fs.mkdirSync(SESSION_DIR, { recursive: true });
@@ -20,21 +20,27 @@ if (!fs.existsSync(SESSION_DIR)) {
 
 const ARCHIVO_COMANDOS = path.join(__dirname, 'comandos_custom.json');
 
-if (!fs.existsSync(ARCHIVO_COMANDOS)) {
-    const comandosIniciales = {
-        ".stock": {
-            texto: `╭────────────────────────────╮\n💙 ✦ AnubisTV ✦ 💙\n✨ 𝗦𝗧𝗢𝗖𝗞 𝗗𝗜𝗦𝗣𝗢𝗡𝗜𝗕𝗟𝗘 ✨\n╰────────────────────────────╯\n✨ Cuentas disponibles\n⚡ Entrega rápida\n🤝 Atención personalizada\n⚠️ Consulta disponibilidad antes de realizar tu pago.\n🚫 No se realizan reembolsos.\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🎬 𝗦𝗧𝗥𝗘𝗔𝗠𝗜𝗡𝗚 :･ﾟ✧ ⋆⋅☆⋅⋆\n❤️ NETFLIX\n▸ 👤 Perfil $55\n▸ 👥 Completa $230\n💙 PRIME VIDEO\n▸ 👤 Perfil $20\n▸ 👥 Completa $45\n🩵 PARAMOUNT+\n▸ 👤 Perfil $17\n▸ 👥 Completa $45\n💙 DISNEY+\n▸ 👤 Perfil $22\n▸ 👥 Completa $70\n💜 MAX PLATINO\n▸ 👤 Perfil $21\n▸ 👥 Completa $55\n🧡 CRUNCHYROLL\n▸ 👤 Perfil $15\n▸ 👥 Completa $45\n🧡 VIX (Mensual)\n▸ 👤 Perfil $11\n▸ 👥 Completa $20\n🧡 VIX (Anual)\n▸ 👤 Perfil $15\n▸ 👥 Completa $30\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🎵 𝗠𝗨́𝗦𝗜𝗖𝗔 :･ﾟ✧ ⋆⋅☆⋅⋆\n💚 SPOTIFY PREMIUM\n▸ 1 Mes $40\n▸ 3 Meses $85\n❤️ YOUTUBE PREMIUM\n▸ Invitación $25\n▸ Familiar (tus datos) $45\n\n⋆⋅☆⋅⋆ ✧･ﾟ: 🛠️ 𝗔𝗣𝗣𝗦 & 𝗛𝗘𝗥𝗥𝗔𝗠𝗜𝗘𝗡𝗧𝗔𝗦 :･ﾟ✧ ⋆⋅☆⋅⋆\n💜 CANVA PRO\n▸ 1 Mes $25\n▸ 3 Meses $50\n▸ 6 Meses $70\n▸ Anual $90\n💼 MICROSOFT 365\n▸ 1 Mes $25\n▸ 2 Meses $50\n▸ 6 Meses $90\n📦 OTROS SERVICIOS\n🦉 Duolingo $35\n🎧 Deezer $35\n🔞 Pornhub $40\n🎵 Tidal $35\n👨‍👩‍👧‍👦 Tidal Familiar $45\n🎬 Mubi $35\n👨‍👩‍👧‍👦 Mubi Familiar $45\n🎥 Universal+ $35\n📺 Fox One $35\n🍎 Apple TV $35n\n⋆⋅☆⋅⋆ ✧･ﾟ: 💙 AnubisTV 💙 :･ﾟ✧ ⋆⋅☆⋅⋆\n✨ Calidad • Confianza • Rapidez\n💬 ¡Gracias por tu preferencia!\n\n┊💫 Streaming AnubisTV 💫 ┊`,
-            imagen: ""
-        },
-        ".combo": {
-            texto: `🎁 COMBOS\n💥 Ahorra más comprando en combo\n⚡ Entrega rápida\n✅ Stock disponible\n\n🥇 COMBO #1 | Más vendido\n❤️ Netflix\n💜 Max\n🧡 ViX\n💰 Precio: $80\n\n🥈 COMBO #2\n💙 Disney+\n💙 Prime Video\n🧡 Crunchyroll\n💰 Precio: $55\n\n🥉 COMBO #3\n❤️ Netflix\n💙 Disney+\n💙 Prime Video\n💰 Precio: $84\n\n🎬 COMBO #4\n💜 Max\n🩵 Paramount+\n🧡 ViX\n💰 Precio: $45\n\n🍿 COMBO #5\n💙 Disney+\n🩵 Paramount+\n🧡 ViX\n💰 Precio: $45\n\n🔥 COMBO #6\n❤️ Netflix\n💜 Max\n🧡 Crunchyroll\n💰 Precio: $80\n\n🎵 COMBO #7\n💚 Spotify Premium\n❤️ YouTube Premium\n💰 Precio: $70\n\n📺 COMBO #8\n💙 Prime Video\n🩵 Paramount+\n🧡 ViX\n💰 Precio: $43\n\n⭐ COMBO #9\n💙 Disney+\n💜 Max\n🧡 Crunchyroll\n💰 Precio: $55\n\n👑 COMBO #10 | Premium\n❤️ Netflix\n💙 Disney+\n💜 Max\n💙 Prime Video\n💰 Precio: $85\n\n`,
-            imagen: ""
-        }
-    };
-    fs.writeFileSync(ARCHIVO_COMANDOS, JSON.stringify(comandosIniciales, null, 2));
+// CACHÉ EN MEMORIA RAM
+let COMANDOS_CACHE = {};
+
+function inicializarComandos() {
+    if (!fs.existsSync(ARCHIVO_COMANDOS)) {
+        const comandosIniciales = {
+            ".stock": {
+                texto: `╭────────────────────────────╮\n💙 ✦ AnubisTV ✦ 💙\n✨ 𝗦𝗧𝗢𝗖𝗞 𝗗𝗜𝗦𝗣𝗢𝗡𝗜𝗕𝗟𝗘 ✨\n╰────────────────────────────╯\n✨ Cuentas disponibles\n⚡ Entrega rápida\n🤝 Atención personalizada\n⚠️ Consulta disponibilidad antes de realizar tu pago.\n🚫 No se realizan reembolsos.`,
+                imagen: ""
+            },
+            ".combo": {
+                texto: `🎁 COMBOS\n💥 Ahorra más comprando en combo\n⚡ Entrega rápida\n✅ Stock disponible`,
+                imagen: ""
+            }
+        };
+        fs.writeFileSync(ARCHIVO_COMANDOS, JSON.stringify(comandosIniciales, null, 2));
+    }
+    cargarComandosRAM();
 }
 
-function cargarComandos() {
+function cargarComandosRAM() {
     try {
         const rawData = fs.readFileSync(ARCHIVO_COMANDOS, 'utf-8');
         const parsed = JSON.parse(rawData);
@@ -46,17 +52,27 @@ function cargarComandos() {
                 estandarizado[key] = value;
             }
         }
-        return estandarizado;
+        COMANDOS_CACHE = estandarizado;
     } catch (e) {
-        return {};
+        COMANDOS_CACHE = {};
     }
 }
 
 function guardarComandosBD(comandos) {
+    COMANDOS_CACHE = comandos;
     fs.writeFileSync(ARCHIVO_COMANDOS, JSON.stringify(comandos, null, 2));
 }
 
-// ==================== SERVIDOR WEB ====================
+inicializarComandos();
+
+// Función auxiliar para extraer el JID limpio de forma segura
+function obtenerJidLimpio(participante) {
+    if (!participante) return '';
+    const idStr = typeof participante === 'string' ? participante : (participante.id || '');
+    return idStr.split(':')[0].split('@')[0] + '@s.whatsapp.net';
+}
+
+// ==================== SERVIDOR WEB Y PANEL ====================
 const app = express();
 const PORT = process.env.PORT || 3000;
 let rawQR = '';
@@ -84,7 +100,7 @@ app.get('/', (req, res) => {
                 #qrcode-box img, #qrcode-box canvas { border-radius: 12px; border: 4px solid #38bdf8; padding: 10px; background: white; }
                 .code-display { font-size: 2.2em; font-weight: bold; letter-spacing: 5px; color: #4ade80; background: #0f172a; padding: 15px; border-radius: 10px; border: 2px dashed #4ade80; margin: 15px 0; display: inline-block; }
                 input, textarea { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; font-family: inherit; }
-                input[type="file"] { background: #334155; cursor: pointer; color: #38bdf8; font-size: 0.9em; }
+                input[type="file"] { background: #334155; cursor: pointer; color: #38bdf8; }
                 textarea { height: 120px; resize: vertical; }
                 button { background: #0284c7; color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
                 button:hover { background: #0369a1; }
@@ -92,7 +108,6 @@ app.get('/', (req, res) => {
                 .item-cmd { background: #334155; padding: 15px; border-radius: 8px; margin-bottom: 10px; text-align: left; display: flex; justify-content: space-between; align-items: center; white-space: pre-wrap; }
                 .cmd-name { font-weight: bold; color: #4ade80; font-size: 1.1em; }
                 .img-tag { font-size: 0.8em; background: #38bdf8; color: #0f172a; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 8px; }
-                .separator { margin: 10px 0; font-size: 0.85em; color: #94a3b8; font-weight: bold; }
             </style>
         </head>
         <body>
@@ -101,7 +116,7 @@ app.get('/', (req, res) => {
                     <h1>💙 AnubisTV Bot 💙</h1>
                     <p id="status-text">Cargando estado...</p>
                     <div id="pairing-section" style="display:none; margin-top:15px;">
-                        <p style="font-size:0.95em; color:#cbd5e1;">Si el QR no carga, ingresa tu número con código de país para vincular con código:</p>
+                        <p style="font-size:0.95em; color:#cbd5e1;">Ingresa tu número con código de país para vincular:</p>
                         <input type="text" id="phone-num" placeholder="Ej: 5215512345678" style="text-align:center; max-width:300px;" />
                         <button onclick="solicitarCodigo()" style="max-width:300px;">📲 Generar Código de 8 Dígitos</button>
                     </div>
@@ -112,19 +127,14 @@ app.get('/', (req, res) => {
                 <div id="panel-admin" style="display: none;">
                     <div class="card" style="text-align: left;">
                         <h2>➕ Crear o Modificar Comando</h2>
-                        <label>Comando (Ejemplo: .publicidad o .stock):</label>
-                        <input type="text" id="cmd-key" placeholder=".publicidad" />
+                        <label>Comando (Ej: .stock, .combo, .peliculas):</label>
+                        <input type="text" id="cmd-key" placeholder=".peliculas" />
                         
-                        <label>📁 Opción 1: Subir Foto desde Celular/PC (Opcional)</label>
+                        <label>📁 Subir Foto desde Celular/PC (Opcional):</label>
                         <input type="file" id="cmd-file" accept="image/*" />
 
-                        <div class="separator">── O TAMBIÉN ──</div>
-
-                        <label>🔗 Opción 2: O pegar URL de Imagen (Opcional)</label>
-                        <input type="text" id="cmd-img-url" placeholder="https://ejemplo.com/imagen.jpg" />
-
                         <label>Respuesta o Pie de Imagen:</label>
-                        <textarea id="cmd-value" placeholder="Escribe aquí el mensaje o pie de imagen..."></textarea>
+                        <textarea id="cmd-value" placeholder="Escribe aquí el texto..."></textarea>
                         
                         <button id="btn-save" onclick="guardarComando()">💾 Guardar Comando</button>
                     </div>
@@ -162,7 +172,7 @@ app.get('/', (req, res) => {
                             pairingSection.style.display = 'block';
 
                             if (data.code) {
-                                statusText.innerText = 'Ingresa este código en tu WhatsApp (Dispositivos Vinculados):';
+                                statusText.innerText = 'Ingresa este código en tu WhatsApp:';
                                 codeBox.innerHTML = '<div class="code-display">' + data.code + '</div>';
                                 qrBox.innerHTML = '';
                             } else if (data.qr) {
@@ -174,7 +184,7 @@ app.get('/', (req, res) => {
                                     new QRCode(qrBox, { text: data.qr, width: 230, height: 230 });
                                 }
                             } else {
-                                statusText.innerText = '⌛ Generando sesión... Ingrese su número si no carga el QR.';
+                                statusText.innerText = '⌛ Generando sesión...';
                             }
                         }
                     } catch (err) {
@@ -185,10 +195,9 @@ app.get('/', (req, res) => {
                 async function solicitarCodigo() {
                     const phone = document.getElementById('phone-num').value.trim();
                     if (!phone) {
-                        alert('Ingresa tu número de WhatsApp con código de país (Ej: 5215512345678)');
+                        alert('Ingresa tu número completo con lada.');
                         return;
                     }
-
                     const res = await fetch('/api/solicitar-codigo', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -196,10 +205,10 @@ app.get('/', (req, res) => {
                     });
                     const data = await res.json();
                     if (data.code) {
-                        alert('✅ Código generado exitosamente: ' + data.code);
+                        alert('✅ Código: ' + data.code);
                         checkStatus();
                     } else {
-                        alert('⚠️ Error al generar código: ' + (data.error || 'Intente nuevamente'));
+                        alert('⚠️ Error: ' + (data.error || 'Reintente'));
                     }
                 }
 
@@ -218,7 +227,7 @@ app.get('/', (req, res) => {
                         div.innerHTML = \`
                             <div>
                                 <div class="cmd-name">\${key} \${imgBadge}</div>
-                                <div style="font-size: 0.9em; color: #cbd5e1; max-height: 80px; overflow: hidden; text-overflow: ellipsis;">\${obj.texto}</div>
+                                <div style="font-size: 0.9em; color: #cbd5e1; max-height: 80px; overflow: hidden;">\${obj.texto}</div>
                             </div>
                             <button class="btn-danger" onclick="eliminarComando('\${key}')">Eliminar</button>
                         \`;
@@ -229,59 +238,33 @@ app.get('/', (req, res) => {
                 async function guardarComando() {
                     let key = document.getElementById('cmd-key').value.trim();
                     const texto = document.getElementById('cmd-value').value;
-                    const urlImg = document.getElementById('cmd-img-url').value.trim();
                     const fileInput = document.getElementById('cmd-file');
                     const btn = document.getElementById('btn-save');
 
-                    // Corrección automática si ponen ./comando o /comando
-                    if (key.startsWith('./')) {
-                        key = '.' + key.substring(2);
-                    } else if (key.startsWith('/')) {
-                        key = '.' + key.substring(1);
-                    } else if (!key.startsWith('.')) {
-                        key = '.' + key;
-                    }
+                    if (!key.startsWith('.')) key = '.' + key;
 
-                    if (!key || key === '.') {
-                        alert('Escribe un nombre para el comando.');
-                        return;
-                    }
-
-                    if (!texto && fileInput.files.length === 0 && !urlImg) {
-                        alert('Escribe un texto o selecciona/pega una imagen.');
-                        return;
-                    }
-
-                    btn.innerText = '⏳ Guardando comando...';
+                    btn.innerText = '⏳ Guardando...';
                     btn.disabled = true;
 
                     const formData = new FormData();
                     formData.append('key', key);
                     formData.append('texto', texto);
-                    formData.append('urlImagen', urlImg);
                     if (fileInput.files.length > 0) {
                         formData.append('imagen', fileInput.files[0]);
                     }
 
                     try {
-                        const res = await fetch('/api/comandos', {
-                            method: 'POST',
-                            body: formData
-                        });
+                        const res = await fetch('/api/comandos', { method: 'POST', body: formData });
                         const data = await res.json();
-
                         if (data.success) {
                             document.getElementById('cmd-key').value = '';
                             document.getElementById('cmd-value').value = '';
-                            document.getElementById('cmd-img-url').value = '';
                             document.getElementById('cmd-file').value = '';
                             cargarComandosUI();
-                            alert('✅ Comando ' + key + ' guardado exitosamente.');
-                        } else {
-                            alert('⚠️ Error al guardar: ' + (data.error || 'Fallo desconocido'));
+                            alert('✅ Comando ' + key + ' guardado.');
                         }
                     } catch (err) {
-                        alert('Error en la solicitud: ' + err.message);
+                        alert('Error: ' + err.message);
                     } finally {
                         btn.innerText = '💾 Guardar Comando';
                         btn.disabled = false;
@@ -289,7 +272,7 @@ app.get('/', (req, res) => {
                 }
 
                 async function eliminarComando(key) {
-                    if (confirm('¿Seguro que deseas eliminar el comando ' + key + '?')) {
+                    if (confirm('¿Eliminar ' + key + '?')) {
                         await fetch('/api/comandos', {
                             method: 'DELETE',
                             headers: { 'Content-Type': 'application/json' },
@@ -307,39 +290,31 @@ app.get('/', (req, res) => {
     `);
 });
 
-app.get('/api/estado', (req, res) => {
-    res.json({ connected: botConectado, qr: rawQR, code: pairingCode });
-});
+app.get('/api/estado', (req, res) => res.json({ connected: botConectado, qr: rawQR, code: pairingCode }));
+app.get('/api/comandos', (req, res) => res.json(COMANDOS_CACHE));
 
 app.post('/api/solicitar-codigo', async (req, res) => {
     try {
         const { phone } = req.body;
         const cleanPhone = phone.replace(/[^0-9]/g, '');
-        
         if (globalSock && !botConectado) {
             pairingCode = await globalSock.requestPairingCode(cleanPhone);
             pairingCode = pairingCode?.match(/.{1,4}/g)?.join('-') || pairingCode;
             res.json({ success: true, code: pairingCode });
         } else {
-            res.json({ success: false, error: 'El servicio no está listo o ya está conectado.' });
+            res.json({ success: false, error: 'Servidor no listo o conectado.' });
         }
     } catch (err) {
-        console.error('Error al solicitar código:', err);
         res.json({ success: false, error: err.message });
     }
 });
 
-app.get('/api/comandos', (req, res) => {
-    res.json(cargarComandos());
-});
-
 app.post('/api/comandos', upload.single('imagen'), async (req, res) => {
     try {
-        const { key, texto, urlImagen } = req.body;
-        const comandos = cargarComandos();
-        let imageUrl = urlImagen || comandos[key.toLowerCase()]?.imagen || "";
+        const { key, texto } = req.body;
+        const comandos = { ...COMANDOS_CACHE };
+        let imageUrl = comandos[key.toLowerCase()]?.imagen || "";
 
-        // Si se subió un archivo desde PC/Móvil, lo convertimos a DataURL interno (Sin depender de Imgur)
         if (req.file) {
             const mimeType = req.file.mimetype || 'image/jpeg';
             const base64Img = req.file.buffer.toString('base64');
@@ -350,24 +325,23 @@ app.post('/api/comandos', upload.single('imagen'), async (req, res) => {
         guardarComandosBD(comandos);
         res.json({ success: true });
     } catch (err) {
-        console.error('Error al guardar comando:', err.message);
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
 app.delete('/api/comandos', (req, res) => {
     const { key } = req.body;
-    const comandos = cargarComandos();
+    const comandos = { ...COMANDOS_CACHE };
     delete comandos[key.toLowerCase()];
     guardarComandosBD(comandos);
     res.json({ success: true });
 });
 
-app.listen(PORT, () => console.log(`🌐 Servidor activo en el puerto ${PORT}`));
+app.listen(PORT, () => console.log(`🌐 Servidor activo en puerto ${PORT}`));
 
-// ==================== LÓGICA BOT ====================
+// ==================== LÓGICA DEL BOT ====================
 async function iniciarBot() {
-    console.log('🔄 Iniciando Baileys...');
+    console.log('🔄 Iniciando motor de Baileys...');
     
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
     const { version } = await fetchLatestBaileysVersion();
@@ -381,14 +355,12 @@ async function iniciarBot() {
     });
 
     globalSock = sock;
-
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
-            console.log('⚡ QR Generado');
             botConectado = false;
             rawQR = qr;
         }
@@ -398,13 +370,8 @@ async function iniciarBot() {
             rawQR = '';
             pairingCode = '';
             const statusCode = lastDisconnect?.error?.output?.statusCode;
-            const causaCierreSesion = statusCode === DisconnectReason.loggedOut;
-
-            if (causaCierreSesion) {
-                console.log('⚠️ Sesión expirada. Limpiando datos...');
-                if (fs.existsSync(SESSION_DIR)) {
-                    fs.rmSync(SESSION_DIR, { recursive: true, force: true });
-                }
+            if (statusCode === DisconnectReason.loggedOut) {
+                if (fs.existsSync(SESSION_DIR)) fs.rmSync(SESSION_DIR, { recursive: true, force: true });
             }
             setTimeout(iniciarBot, 3000);
         } else if (connection === 'open') {
@@ -415,20 +382,42 @@ async function iniciarBot() {
         }
     });
 
-    // Bienvenida
+    // ==================== DETECCION DE RANGO ADMIN Y BIENVENIDA CON CANCIÓN ====================
     sock.ev.on('group-participants.update', async (update) => {
         const { id, participants, action } = update;
+        const botJid = obtenerJidLimpio(sock.user);
 
+        if (action === 'promote') {
+            const botFuePromovido = participants.some(p => obtenerJidLimpio(p) === botJid);
+
+            if (botFuePromovido) {
+                await sock.sendMessage(id, {
+                    text: `🤖 *BOT AnubiSystem ACTIVADO*\n\n¡Gracias por otorgarme el rango de Administrador!\nA partir de ahora estoy 100% activo para responder en este grupo. 🍿💙`
+                });
+                return;
+            }
+        }
+
+        // BIENVENIDA (Imagen + Canción Marilyn Manson - This Is the New Shit)
         if (action === 'add') {
-            for (const usuarioJid of participants) {
-                try {
+            try {
+                const groupMetadata = await sock.groupMetadata(id);
+                const botEsAdmin = groupMetadata.participants.some(p => {
+                    const pClean = obtenerJidLimpio(p);
+                    return pClean === botJid && (p.admin === 'admin' || p.admin === 'superadmin');
+                });
+
+                if (!botEsAdmin) return;
+
+                for (const usuario of participants) {
+                    const usuarioJid = typeof usuario === 'string' ? usuario : (usuario.id || '');
                     const usuarioTag = `@${usuarioJid.split('@')[0]}`;
                     const mensajeBienvenida = `¡Hola ${usuarioTag}! 👋\n\n` +
                     `✨ *Bienvenido a AnubisTV* ✨\n\n` +
                     `📜 *Reglas del grupo:*\n` +
                     `1️⃣ No insultar y respetar a cada miembro del grupo.\n` +
                     `2️⃣ Si tienen fallas con la cuenta, mandar msj en privado.\n\n` +
-                    `Escribe *.stock* o *.combos* para ver nuestro catálogo. 🍿💙`;
+                    `Escribe *.stock* o *.combo* para ver nuestro catálogo. 🍿💙`;
 
                     let ppUrl;
                     try {
@@ -440,49 +429,240 @@ async function iniciarBot() {
                     const response = await axios.get(ppUrl, { responseType: 'arraybuffer' });
                     const imageBuffer = Buffer.from(response.data, 'binary');
 
+                    // 1. Enviar foto con mensaje de bienvenida
                     await sock.sendMessage(id, {
                         image: imageBuffer,
                         caption: mensajeBienvenida,
                         mentions: [usuarioJid]
                     });
 
-                } catch (err) {
-                    console.error('Error bienvenida:', err);
+                    // 2. Descargar y enviar canción "Marilyn Manson - This Is the New Shit"
+                    try {
+                        const apiRes = await axios.get(`https://api.vreden.web.id/api/download/playaudio?query=${encodeURIComponent('Marilyn Manson This Is the New Shit')}`);
+                        const audioUrl = apiRes.data?.result?.downloadUrl || apiRes.data?.result?.url;
+
+                        if (audioUrl) {
+                            await sock.sendMessage(id, { 
+                                audio: { url: audioUrl }, 
+                                mimetype: 'audio/mp4',
+                                ptt: false 
+                            });
+                        }
+                    } catch (audioErr) {
+                        console.error('Error al enviar audio de bienvenida:', audioErr.message);
+                    }
                 }
+            } catch (err) {
+                console.error('Error bienvenida:', err);
             }
         }
     });
 
-    // Lectura de Comandos
+    // ==================== LECTURA DE COMANDOS ====================
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
 
         const msg = messages[0];
-        if (!msg.message) return;
+        if (!msg.message || msg.key.fromMe) return;
 
         const from = msg.key.remoteJid;
         const isGroup = from.endsWith('@g.us');
 
+        if (isGroup) {
+            try {
+                const groupMetadata = await sock.groupMetadata(from);
+                const botJid = obtenerJidLimpio(sock.user);
+                const botEsAdmin = groupMetadata.participants.some(p => {
+                    const pClean = obtenerJidLimpio(p);
+                    return pClean === botJid && (p.admin === 'admin' || p.admin === 'superadmin');
+                });
+
+                if (!botEsAdmin) return;
+            } catch (e) {
+                return;
+            }
+        }
+
         const texto = msg.message.conversation ||
-        msg.message.extendedTextMessage?.text || '';
+                      msg.message.extendedTextMessage?.text || '';
 
-        const comando = texto.trim().toLowerCase();
+        const textoLimpio = texto.trim();
+        const comando = textoLimpio.toLowerCase();
+        const partes = textoLimpio.split(' ');
+        const primerComando = partes[0].toLowerCase();
 
-        const comandosDB = cargarComandos();
-        
-        if (comandosDB[comando]) {
-            const configCmd = comandosDB[comando];
+        // 1. COMANDO .CURP
+        if (primerComando === '.curp') {
+            const curpIngresada = partes[1]?.toUpperCase().trim();
+            if (!curpIngresada || curpIngresada.length !== 18) {
+                return await sock.sendMessage(from, { text: '⚠️ Escribe tu CURP válida de 18 caracteres.\nEjemplo: `.curp ABCD123456HDFRRR01`' }, { quoted: msg });
+            }
+
+            await sock.sendMessage(from, { text: '🔎 Consultando y generando solicitud de CURP...' }, { quoted: msg });
+
+            try {
+                const apiCurp = await axios.get(`https://curp-api.vercel.app/api/curp/${curpIngresada}`);
+                
+                if (apiCurp.data && apiCurp.data.curp) {
+                    const datos = apiCurp.data;
+                    const respuestaCurp = `📄 *SOLICITUD DE CURP REGISTRADA*\n\n` +
+                    `👤 *Nombre:* ${datos.nombres || ''} ${datos.apellidoPaterno || ''} ${datos.apellidoMaterno || ''}\n` +
+                    `🆔 *CURP:* ${datos.curp}\n` +
+                    `📅 *Fecha de Nac:* ${datos.fechaNacimiento || 'N/D'}\n` +
+                    `👫 *Sexo:* ${datos.sexo === 'H' ? 'Hombre' : 'Mujer'}\n` +
+                    `📍 *Estado:* ${datos.estadoNacimiento || 'N/D'}\n\n` +
+                    `📩 *Tu archivo en PDF oficial se está procesando. Un asesor te lo adjuntará en breve.*`;
+
+                    await sock.sendMessage(from, { text: respuestaCurp }, { quoted: msg });
+                } else {
+                    await sock.sendMessage(from, { text: '❌ No se encontraron datos con esa CURP. Verifica los caracteres.' }, { quoted: msg });
+                }
+            } catch (err) {
+                await sock.sendMessage(from, { text: '❌ Error al consultar. Un asesor revisará tu solicitud manualmente.' }, { quoted: msg });
+            }
+            return;
+        }
+
+        // 2. COMANDO .RFC
+        if (primerComando === '.rfc') {
+            const datosIngresados = textoLimpio.substring(primerComando.length).trim();
+            if (!datosIngresados) {
+                return await sock.sendMessage(from, { text: '⚠️ Escribe tu RFC o Nombre completo.\nEjemplo: `.rfc ABCD900101XXX`' }, { quoted: msg });
+            }
+
+            const respuestaRfc = `📄 *SOLICITUD DE CONSTANCIA RFC*\n\n` +
+            `📝 *Dato ingresado:* ${datosIngresados}\n` +
+            `STATUS: En cola de expedición SAT.\n\n` +
+            `📩 *Un asesor procesará tu archivo en PDF oficial y lo enviará a este chat.*`;
+
+            return await sock.sendMessage(from, { text: respuestaRfc }, { quoted: msg });
+        }
+
+        // 3. COMANDO .ACTAMATRIMONIO
+        if (primerComando === '.actamatrimonio') {
+            const datosIngresados = textoLimpio.substring(primerComando.length).trim();
+            if (!datosIngresados) {
+                return await sock.sendMessage(from, { text: '⚠️ Escribe los nombres de los cónyuges y estado.\nEjemplo: `.actamatrimonio Juan Pérez y Maria Gómez - CDMX`' }, { quoted: msg });
+            }
+
+            const respuestaMatrimonio = `💍 *SOLICITUD DE ACTA DE MATRIMONIO*\n\n` +
+            `📝 *Datos del Registro:* ${datosIngresados}\n` +
+            `STATUS: Registrado en sistema SIDEA.\n\n` +
+            `📩 *Procesando expedición en PDF oficial digitalizado.*`;
+
+            return await sock.sendMessage(from, { text: respuestaMatrimonio }, { quoted: msg });
+        }
+
+        // 4. COMANDO .DEFUNCION
+        if (primerComando === '.defuncion' || primerComando === '.actadefuncion') {
+            const datosIngresados = textoLimpio.substring(primerComando.length).trim();
+            if (!datosIngresados) {
+                return await sock.sendMessage(from, { text: '⚠️ Escribe el nombre completo del finado y estado.\nEjemplo: `.defuncion Pedro López García - Estado de México`' }, { quoted: msg });
+            }
+
+            const respuestaDefuncion = `⚰️ *SOLICITUD DE ACTA DE DEFUNCIÓN*\n\n` +
+            `📝 *Finado registrado:* ${datosIngresados}\n` +
+            `STATUS: Búsqueda en Registro Civil Activa.\n\n` +
+            `📩 *Un asesor validará los folios y te compartirá el PDF oficial.*`;
+
+            return await sock.sendMessage(from, { text: respuestaDefuncion }, { quoted: msg });
+        }
+
+        // 5. ACTUALIZACIÓN DE STOCK Y COMBOS POR CHAT
+        if (primerComando === '.actualizastock') {
+            const contenido = textoLimpio.substring(primerComando.length).trim();
+            if (!contenido) return await sock.sendMessage(from, { text: '⚠️ Usa: `.actualizastock Nuevo texto de stock`' }, { quoted: msg });
+            
+            const comandos = { ...COMANDOS_CACHE };
+            comandos['.stock'] = { texto: contenido, imagen: comandos['.stock']?.imagen || "" };
+            guardarComandosBD(comandos);
+            return await sock.sendMessage(from, { text: '✅ Stock actualizado con éxito.' }, { quoted: msg });
+        }
+
+        if (primerComando === '.actualizacombo' || primerComando === '.actualizacombos') {
+            const contenido = textoLimpio.substring(primerComando.length).trim();
+            if (!contenido) return await sock.sendMessage(from, { text: '⚠️ Usa: `.actualizacombo Nuevo texto de combos`' }, { quoted: msg });
+            
+            const comandos = { ...COMANDOS_CACHE };
+            comandos['.combo'] = { texto: contenido, imagen: comandos['.combo']?.imagen || "" };
+            comandos['.combos'] = { texto: contenido, imagen: comandos['.combo']?.imagen || "" };
+            guardarComandosBD(comandos);
+            return await sock.sendMessage(from, { text: '✅ Combos actualizados con éxito.' }, { quoted: msg });
+        }
+
+        if (primerComando === '.agregardinamico') {
+            const nuevoCmd = partes[1]?.toLowerCase();
+            const contenido = textoLimpio.substring(partes[0].length + (partes[1]?.length || 0) + 1).trim();
+
+            if (!nuevoCmd || !nuevoCmd.startsWith('.') || !contenido) {
+                return await sock.sendMessage(from, { text: '⚠️ Usa: `.agregardinamico .agregapeliculas Texto o catálogo aquí`' }, { quoted: msg });
+            }
+
+            const comandos = { ...COMANDOS_CACHE };
+            comandos[nuevoCmd] = { texto: contenido, imagen: "" };
+            guardarComandosBD(comandos);
+            return await sock.sendMessage(from, { text: `✅ Comando ${nuevoCmd} creado e integrado.` }, { quoted: msg });
+        }
+
+        // 6. DESCARGA DE VÍDEOS Y MÚSICA
+        if (primerComando === '.descargar') {
+            const url = partes[1];
+            if (!url) return await sock.sendMessage(from, { text: '⚠️ Coloca el enlace. Ej: `.descargar https://link-del-video`' }, { quoted: msg });
+
+            await sock.sendMessage(from, { text: '⏳ Procesando descarga, por favor espera...' }, { quoted: msg });
+            try {
+                const apiRes = await axios.get(`https://api.vreden.web.id/api/download/video?url=${encodeURIComponent(url)}`);
+                const downloadUrl = apiRes.data?.result?.downloadUrl || apiRes.data?.result?.url;
+
+                if (downloadUrl) {
+                    await sock.sendMessage(from, { 
+                        video: { url: downloadUrl }, 
+                        caption: '🎬 ¡Aquí tienes tu vídeo/película descargado!' 
+                    }, { quoted: msg });
+                } else {
+                    await sock.sendMessage(from, { text: '❌ No se pudo extraer el vídeo de ese enlace.' }, { quoted: msg });
+                }
+            } catch (err) {
+                await sock.sendMessage(from, { text: '❌ Error al procesar el enlace de descarga.' }, { quoted: msg });
+            }
+            return;
+        }
+
+        if (primerComando === '.musica') {
+            const busqueda = textoLimpio.substring(primerComando.length).trim();
+            if (!busqueda) return await sock.sendMessage(from, { text: '⚠️ Escribe la canción. Ej: `.musica Bad Bunny`' }, { quoted: msg });
+
+            await sock.sendMessage(from, { text: '🎵 Buscando y descargando audio...' }, { quoted: msg });
+            try {
+                const apiRes = await axios.get(`https://api.vreden.web.id/api/download/playaudio?query=${encodeURIComponent(busqueda)}`);
+                const audioUrl = apiRes.data?.result?.downloadUrl || apiRes.data?.result?.url;
+
+                if (audioUrl) {
+                    await sock.sendMessage(from, { 
+                        audio: { url: audioUrl }, 
+                        mimetype: 'audio/mp4',
+                        ptt: false 
+                    }, { quoted: msg });
+                } else {
+                    await sock.sendMessage(from, { text: '❌ No se encontró la canción.' }, { quoted: msg });
+                }
+            } catch (err) {
+                await sock.sendMessage(from, { text: '❌ Error al buscar la música.' }, { quoted: msg });
+            }
+            return;
+        }
+
+        // 7. RESPUESTA RÁPIDA DE COMANDOS GUARDADOS
+        if (COMANDOS_CACHE[comando]) {
+            const configCmd = COMANDOS_CACHE[comando];
 
             if (configCmd.imagen && configCmd.imagen.trim() !== '') {
                 try {
                     let imageBuffer;
-
-                    // Si la imagen es un DataURL de archivo subido
                     if (configCmd.imagen.startsWith('data:image')) {
                         const base64Data = configCmd.imagen.split(',')[1];
                         imageBuffer = Buffer.from(base64Data, 'base64');
                     } else {
-                        // Si es una URL de internet
                         const response = await axios.get(configCmd.imagen, { responseType: 'arraybuffer' });
                         imageBuffer = Buffer.from(response.data, 'binary');
                     }
@@ -493,7 +673,6 @@ async function iniciarBot() {
                     }, { quoted: msg });
                     return;
                 } catch (err) {
-                    console.error('Error enviando imagen:', err.message);
                     await sock.sendMessage(from, { text: configCmd.texto }, { quoted: msg });
                     return;
                 }
@@ -503,17 +682,16 @@ async function iniciarBot() {
             }
         }
 
+        // 8. COMANDOS DE ADMINISTRACIÓN DE GRUPO
         if (isGroup && (comando === '.cerrar' || comando === '.abrir')) {
             try {
                 const groupMetadata = await sock.groupMetadata(from);
-                const participants = groupMetadata.participants;
                 const sender = msg.key.participant || msg.key.remoteJid;
+                const senderClean = obtenerJidLimpio(sender);
 
-                const senderClean = sender.split(':')[0].split('@')[0];
-
-                const esAdmin = participants.some(p => {
-                    const participantClean = p.id.split(':')[0].split('@')[0];
-                    return participantClean === senderClean && (p.admin === 'admin' || p.admin === 'superadmin');
+                const esAdmin = groupMetadata.participants.some(p => {
+                    const pClean = obtenerJidLimpio(p);
+                    return pClean === senderClean && (p.admin === 'admin' || p.admin === 'superadmin');
                 });
 
                 if (!esAdmin) {
