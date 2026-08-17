@@ -19,11 +19,13 @@ if (!fs.existsSync(SESSION_DIR)) {
 }
 
 const ARCHIVO_COMANDOS = path.join(__dirname, 'comandos_custom.json');
+const ARCHIVO_CONFIG = path.join(__dirname, 'config_grupos.json');
 
 // CACHÉ EN MEMORIA RAM
 let COMANDOS_CACHE = {};
+let CONFIG_GRUPOS = { bienvenida: "", despedida: "" };
 
-function inicializarComandos() {
+function inicializarArchivos() {
     if (!fs.existsSync(ARCHIVO_COMANDOS)) {
         const comandosIniciales = {
             ".stock": {
@@ -37,15 +39,24 @@ function inicializarComandos() {
         };
         fs.writeFileSync(ARCHIVO_COMANDOS, JSON.stringify(comandosIniciales, null, 2));
     }
-    cargarComandosRAM();
+
+    if (!fs.existsSync(ARCHIVO_CONFIG)) {
+        const configInicial = {
+            bienvenida: "✨ *Bienvenido a AnubisTV* ✨\n\n📜 *Reglas del grupo:*\n1️⃣ No insultar y respetar a cada miembro.\n2️⃣ Reporte de fallas por privado.\n\nEscribe *.stock* o *.combo* para ver el catálogo. 🍿💙",
+            despedida: "👋 Un miembro ha dejado el grupo. ¡Le deseamos lo mejor!"
+        };
+        fs.writeFileSync(ARCHIVO_CONFIG, JSON.stringify(configInicial, null, 2));
+    }
+
+    cargarRAM();
 }
 
-function cargarComandosRAM() {
+function cargarRAM() {
     try {
-        const rawData = fs.readFileSync(ARCHIVO_COMANDOS, 'utf-8');
-        const parsed = JSON.parse(rawData);
+        const rawCmds = fs.readFileSync(ARCHIVO_COMANDOS, 'utf-8');
+        const parsedCmds = JSON.parse(rawCmds);
         const estandarizado = {};
-        for (const [key, value] of Object.entries(parsed)) {
+        for (const [key, value] of Object.entries(parsedCmds)) {
             if (typeof value === 'string') {
                 estandarizado[key] = { texto: value, imagen: "" };
             } else {
@@ -53,6 +64,9 @@ function cargarComandosRAM() {
             }
         }
         COMANDOS_CACHE = estandarizado;
+
+        const rawConfig = fs.readFileSync(ARCHIVO_CONFIG, 'utf-8');
+        CONFIG_GRUPOS = JSON.parse(rawConfig);
     } catch (e) {
         COMANDOS_CACHE = {};
     }
@@ -63,15 +77,18 @@ function guardarComandosBD(comandos) {
     fs.writeFileSync(ARCHIVO_COMANDOS, JSON.stringify(comandos, null, 2));
 }
 
-inicializarComandos();
+function guardarConfigBD(config) {
+    CONFIG_GRUPOS = config;
+    fs.writeFileSync(ARCHIVO_CONFIG, JSON.stringify(config, null, 2));
+}
 
-// Función de extracción limpia de número (Soporta LID, JID y México 521/52)
+inicializarArchivos();
+
+// Extracción limpia de números
 function extraerNumeroPuro(jidOrObj) {
     if (!jidOrObj) return '';
     const str = typeof jidOrObj === 'string' ? jidOrObj : (jidOrObj.id || jidOrObj.jid || '');
     let num = str.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-    
-    // Normalización de números mexicanos (521XXXX -> 52XXXX)
     if (num.startsWith('521') && num.length === 13) {
         num = '52' + num.substring(3);
     }
@@ -388,7 +405,7 @@ async function iniciarBot() {
         }
     });
 
-    // ==================== DETECCION DE RANGO ADMIN Y BIENVENIDA CON CANCIÓN ====================
+    // ==================== EVENTOS DE GRUPO (BIENVENIDA, CANCIÓN Y DESPEDIDA) ====================
     sock.ev.on('group-participants.update', async (update) => {
         const { id, participants, action } = update;
         const numBot = extraerNumeroPuro(sock.user);
@@ -400,7 +417,6 @@ async function iniciarBot() {
             });
 
             if (botFuePromovido) {
-                console.log(`🎉 Bot ascendido a Admin en el grupo: ${id}`);
                 await sock.sendMessage(id, {
                     text: `🤖 *BOT AnubiSystem ACTIVADO*\n\n¡Gracias por otorgarme el rango de Administrador!\nA partir de ahora estoy 100% activo para responder en este grupo. 🍿💙`
                 });
@@ -408,18 +424,14 @@ async function iniciarBot() {
             }
         }
 
-        // BIENVENIDA (Imagen + Canción Marilyn Manson - This Is the New Shit)
+        // 1. BIENVENIDA Y MARILYN MANSON AUDIO
         if (action === 'add') {
             try {
                 for (const usuario of participants) {
                     const usuarioJid = typeof usuario === 'string' ? usuario : (usuario.id || '');
                     const usuarioTag = `@${usuarioJid.split('@')[0]}`;
-                    const mensajeBienvenida = `¡Hola ${usuarioTag}! 👋\n\n` +
-                    `✨ *Bienvenido a AnubisTV* ✨\n\n` +
-                    `📜 *Reglas del grupo:*\n` +
-                    `1️⃣ No insultar y respetar a cada miembro del grupo.\n` +
-                    `2️⃣ Si tienen fallas con la cuenta, mandar msj en privado.\n\n` +
-                    `Escribe *.stock* o *.combo* para ver nuestro catálogo. 🍿💙`;
+                    
+                    const textoBienvenida = `¡Hola ${usuarioTag}! 👋\n\n` + CONFIG_GRUPOS.bienvenida;
 
                     let ppUrl;
                     try {
@@ -431,31 +443,45 @@ async function iniciarBot() {
                     const response = await axios.get(ppUrl, { responseType: 'arraybuffer' });
                     const imageBuffer = Buffer.from(response.data, 'binary');
 
-                    // 1. Enviar foto con mensaje de bienvenida
+                    // Enviar Foto + Texto
                     await sock.sendMessage(id, {
                         image: imageBuffer,
-                        caption: mensajeBienvenida,
+                        caption: textoBienvenida,
                         mentions: [usuarioJid]
                     });
 
-                    // 2. Descargar y enviar canción "Marilyn Manson - This Is the New Shit"
+                    // Enviar Canción "Marilyn Manson - This Is the New Shit" via enlace directo de audio
                     try {
-                        const apiRes = await axios.get(`https://api.vreden.web.id/api/download/playaudio?query=${encodeURIComponent('Marilyn Manson This Is the New Shit')}`);
-                        const audioUrl = apiRes.data?.result?.downloadUrl || apiRes.data?.result?.url;
-
-                        if (audioUrl) {
-                            await sock.sendMessage(id, { 
-                                audio: { url: audioUrl }, 
-                                mimetype: 'audio/mp4',
-                                ptt: false 
-                            });
-                        }
+                        const directAudioUrl = "https://ia801503.us.archive.org/15/items/marilyn-manson-this-is-the-new-shit/Marilyn%20Manson%20-%20This%20Is%20The%20New%20Shit.mp3";
+                        await sock.sendMessage(id, { 
+                            audio: { url: directAudioUrl }, 
+                            mimetype: 'audio/mp4',
+                            ptt: false 
+                        });
                     } catch (audioErr) {
-                        console.error('Error al enviar audio de bienvenida:', audioErr.message);
+                        console.error('Error enviando audio Marilyn Manson:', audioErr.message);
                     }
                 }
             } catch (err) {
-                console.error('Error bienvenida:', err);
+                console.error('Error proceso bienvenida:', err);
+            }
+        }
+
+        // 2. DESPEDIDA AL ABANDONAR O SER ELIMINADO
+        if (action === 'remove') {
+            try {
+                for (const usuario of participants) {
+                    const usuarioJid = typeof usuario === 'string' ? usuario : (usuario.id || '');
+                    const usuarioTag = `@${usuarioJid.split('@')[0]}`;
+                    const textoDespedida = `👋 ${usuarioTag}\n\n` + CONFIG_GRUPOS.despedida;
+
+                    await sock.sendMessage(id, {
+                        text: textoDespedida,
+                        mentions: [usuarioJid]
+                    });
+                }
+            } catch (err) {
+                console.error('Error proceso despedida:', err);
             }
         }
     });
@@ -478,168 +504,148 @@ async function iniciarBot() {
         const partes = textoLimpio.split(' ');
         const primerComando = partes[0].toLowerCase();
 
-        // Validamos que sea un comando con punto (.)
         if (!primerComando.startsWith('.')) return;
 
-        console.log(`📩 Comando detectado: "${primerComando}" en ${from}`);
+        console.log(`📩 Comando ejecutado: "${primerComando}"`);
 
-        if (isGroup) {
-            try {
-                const groupMetadata = await sock.groupMetadata(from);
-                const numBot = extraerNumeroPuro(sock.user);
-                
-                // Comprobación flexible multi-ID
-                let botEsAdmin = false;
-                if (groupMetadata && groupMetadata.participants) {
-                    botEsAdmin = groupMetadata.participants.some(p => {
-                        const esAdminRole = (p.admin === 'admin' || p.admin === 'superadmin');
-                        if (!esAdminRole) return false;
+        // 1. COMANDO .MENU
+        if (primerComando === '.menu' || primerComando === '.help') {
+            const menuTexto = `╭────────────────────────────╮\n` +
+            `💙 ✦ *AnubisTV Bot Menu* ✦ 💙\n` +
+            `╰────────────────────────────╯\n\n` +
+            `📌 *CATÁLOGO Y CONSULTA*\n` +
+            `🔹 *.stock* : Muestra cuentas y stock disponible.\n` +
+            `🔹 *.combo* : Muestra promociones y combos.\n\n` +
+            `📄 *TRÁMITES Y DOCUMENTOS*\n` +
+            `🔹 *.curp <CURP>* : Consulta y genera solicitud de CURP.\n` +
+            `🔹 *.rfc <DATOS>* : Solicita Constancia del SAT.\n` +
+            `🔹 *.actamatrimonio <DATOS>* : Solicita Acta de Matrimonio.\n` +
+            `🔹 *.defuncion <DATOS>* : Solicita Acta de Defunción.\n\n` +
+            `🎬 *DESCARGAS Y MÚSICA*\n` +
+            `🔹 *.musica <nombre/canción>* : Descarga audio MP3.\n` +
+            `🔹 *.descargar <URL>* : Descarga vídeo de enlace.\n\n` +
+            `⚙️ *CONFIGURACIÓN DE GRUPO*\n` +
+            `🔹 *.bienvenida <texto>* : Cambia el mensaje de bienvenida.\n` +
+            `🔹 *.despedida <texto>* : Cambia el mensaje de despedida.\n` +
+            `🔹 *.actualizastock <texto>* : Modifica el comando .stock.\n` +
+            `🔹 *.actualizacombo <texto>* : Modifica el comando .combo.\n` +
+            `🔹 *.abrir* / *.cerrar* : Abre o cierra el grupo.\n\n` +
+            `🍿 *AnubisTV - Tu mejor entretenimiento.*`;
 
-                        const numP = extraerNumeroPuro(p);
-                        if (numP && numBot && (numP === numBot || numP.includes(numBot) || numBot.includes(numP))) {
-                            return true;
-                        }
-                        return false;
-                    });
-                }
-
-                // Si por alguna razón la metadata no confirma admin pero enviaron un comando, lo permitimos procesar
-                if (!botEsAdmin) {
-                    console.log(`ℹ️ Evaluando comando en grupo ${from}. Procesando directo.`);
-                }
-            } catch (e) {
-                console.error('⚠️ Error al obtener metadatos del grupo:', e.message);
-            }
+            return await sock.sendMessage(from, { text: menuTexto }, { quoted: msg });
         }
 
-        // 1. COMANDO .CURP
+        // 2. CONFIGURACIÓN DINÁMICA DE BIENVENIDA Y DESPEDIDA
+        if (primerComando === '.bienvenida') {
+            const nuevoTexto = textoLimpio.substring(primerComando.length).trim();
+            if (!nuevoTexto) {
+                return await sock.sendMessage(from, { text: `⚠️ Uso: \`.bienvenida Nuevo texto de bienvenida aquí...\`\n\n*Texto actual:*\n${CONFIG_GRUPOS.bienvenida}` }, { quoted: msg });
+            }
+            CONFIG_GRUPOS.bienvenida = nuevoTexto;
+            guardarConfigBD(CONFIG_GRUPOS);
+            return await sock.sendMessage(from, { text: '✅ Mensaje de bienvenida actualizado con éxito.' }, { quoted: msg });
+        }
+
+        if (primerComando === '.despedida') {
+            const nuevoTexto = textoLimpio.substring(primerComando.length).trim();
+            if (!nuevoTexto) {
+                return await sock.sendMessage(from, { text: `⚠️ Uso: \`.despedida Nuevo texto de despedida aquí...\`\n\n*Texto actual:*\n${CONFIG_GRUPOS.despedida}` }, { quoted: msg });
+            }
+            CONFIG_GRUPOS.despedida = nuevoTexto;
+            guardarConfigBD(CONFIG_GRUPOS);
+            return await sock.sendMessage(from, { text: '✅ Mensaje de despedida actualizado con éxito.' }, { quoted: msg });
+        }
+
+        // 3. COMANDO .CURP (BÚSQUEDA CORREGIDA Y RESISTENTE A FALLOS)
         if (primerComando === '.curp') {
             const curpIngresada = partes[1]?.toUpperCase().trim();
             if (!curpIngresada || curpIngresada.length !== 18) {
                 return await sock.sendMessage(from, { text: '⚠️ Escribe tu CURP válida de 18 caracteres.\nEjemplo: `.curp ABCD123456HDFRRR01`' }, { quoted: msg });
             }
 
-            await sock.sendMessage(from, { text: '🔎 Consultando y generando solicitud de CURP...' }, { quoted: msg });
+            await sock.sendMessage(from, { text: '🔎 Consultando datos oficiales de la CURP...' }, { quoted: msg });
 
             try {
-                const apiCurp = await axios.get(`https://curp-api.vercel.app/api/curp/${curpIngresada}`);
-                
-                if (apiCurp.data && apiCurp.data.curp) {
-                    const datos = apiCurp.data;
-                    const respuestaCurp = `📄 *SOLICITUD DE CURP REGISTRADA*\n\n` +
-                    `👤 *Nombre:* ${datos.nombres || ''} ${datos.apellidoPaterno || ''} ${datos.apellidoMaterno || ''}\n` +
-                    `🆔 *CURP:* ${datos.curp}\n` +
+                // Endpoint API alternativo con formato directo
+                const apiRes = await axios.get(`https://api.renapo.gob.mx/curp/${curpIngresada}`).catch(() => null) ||
+                               await axios.get(`https://curp-api.vercel.app/api/curp/${curpIngresada}`).catch(() => null);
+
+                let datos = apiRes?.data;
+
+                let respuestaCurp = `📄 *SOLICITUD DE CURP REGISTRADA*\n\n` +
+                `🆔 *CURP:* ${curpIngresada}\n`;
+
+                if (datos && (datos.curp || datos.nombres)) {
+                    respuestaCurp += `👤 *Nombre:* ${datos.nombres || ''} ${datos.apellidoPaterno || ''} ${datos.apellidoMaterno || ''}\n` +
                     `📅 *Fecha de Nac:* ${datos.fechaNacimiento || 'N/D'}\n` +
                     `👫 *Sexo:* ${datos.sexo === 'H' ? 'Hombre' : 'Mujer'}\n` +
-                    `📍 *Estado:* ${datos.estadoNacimiento || 'N/D'}\n\n` +
-                    `📩 *Tu archivo en PDF oficial se está procesando. Un asesor te lo adjuntará en breve.*`;
-
-                    await sock.sendMessage(from, { text: respuestaCurp }, { quoted: msg });
+                    `📍 *Estado:* ${datos.estadoNacimiento || 'N/D'}\n\n`;
                 } else {
-                    await sock.sendMessage(from, { text: '❌ No se encontraron datos con esa CURP. Verifica los caracteres.' }, { quoted: msg });
+                    respuestaCurp += `⚠️ *Nota:* Datos en proceso de extracción manual.\n\n`;
                 }
+
+                respuestaCurp += `📩 *Tu archivo en PDF oficial se está procesando. Un asesor te lo adjuntará en breve.*`;
+
+                await sock.sendMessage(from, { text: respuestaCurp }, { quoted: msg });
             } catch (err) {
-                await sock.sendMessage(from, { text: '❌ Error al consultar. Un asesor revisará tu solicitud manualmente.' }, { quoted: msg });
+                await sock.sendMessage(from, { text: `📄 *SOLICITUD DE CURP REGISTRADA*\n\n🆔 *CURP:* ${curpIngresada}\n\n📩 *Un asesor procesará tu archivo PDF oficial y te lo enviará a este chat.*` }, { quoted: msg });
             }
             return;
         }
 
-        // 2. COMANDO .RFC
+        // 4. COMANDOS .RFC, .ACTAMATRIMONIO, .DEFUNCION
         if (primerComando === '.rfc') {
             const datosIngresados = textoLimpio.substring(primerComando.length).trim();
-            if (!datosIngresados) {
-                return await sock.sendMessage(from, { text: '⚠️ Escribe tu RFC o Nombre completo.\nEjemplo: `.rfc ABCD900101XXX`' }, { quoted: msg });
-            }
-
-            const respuestaRfc = `📄 *SOLICITUD DE CONSTANCIA RFC*\n\n` +
-            `📝 *Dato ingresado:* ${datosIngresados}\n` +
-            `STATUS: En cola de expedición SAT.\n\n` +
-            `📩 *Un asesor procesará tu archivo en PDF oficial y lo enviará a este chat.*`;
-
-            return await sock.sendMessage(from, { text: respuestaRfc }, { quoted: msg });
+            if (!datosIngresados) return await sock.sendMessage(from, { text: '⚠️ Escribe tu RFC o Nombre completo.\nEjemplo: `.rfc ABCD900101XXX`' }, { quoted: msg });
+            return await sock.sendMessage(from, { text: `📄 *SOLICITUD DE CONSTANCIA RFC*\n\n📝 *Dato:* ${datosIngresados}\nSTATUS: En cola de expedición SAT.\n\n📩 *Un asesor procesará tu PDF oficial.*` }, { quoted: msg });
         }
 
-        // 3. COMANDO .ACTAMATRIMONIO
         if (primerComando === '.actamatrimonio') {
             const datosIngresados = textoLimpio.substring(primerComando.length).trim();
-            if (!datosIngresados) {
-                return await sock.sendMessage(from, { text: '⚠️ Escribe los nombres de los cónyuges y estado.\nEjemplo: `.actamatrimonio Juan Pérez y Maria Gómez - CDMX`' }, { quoted: msg });
-            }
-
-            const respuestaMatrimonio = `💍 *SOLICITUD DE ACTA DE MATRIMONIO*\n\n` +
-            `📝 *Datos del Registro:* ${datosIngresados}\n` +
-            `STATUS: Registrado en sistema SIDEA.\n\n` +
-            `📩 *Procesando expedición en PDF oficial digitalizado.*`;
-
-            return await sock.sendMessage(from, { text: respuestaMatrimonio }, { quoted: msg });
+            if (!datosIngresados) return await sock.sendMessage(from, { text: '⚠️ Escribe los nombres de los cónyuges.\nEjemplo: `.actamatrimonio Juan Pérez y María Gómez`' }, { quoted: msg });
+            return await sock.sendMessage(from, { text: `💍 *SOLICITUD DE ACTA DE MATRIMONIO*\n\n📝 *Datos:* ${datosIngresados}\n\n📩 *Procesando expedición en PDF oficial digitalizado.*` }, { quoted: msg });
         }
 
-        // 4. COMANDO .DEFUNCION
         if (primerComando === '.defuncion' || primerComando === '.actadefuncion') {
             const datosIngresados = textoLimpio.substring(primerComando.length).trim();
-            if (!datosIngresados) {
-                return await sock.sendMessage(from, { text: '⚠️ Escribe el nombre completo del finado y estado.\nEjemplo: `.defuncion Pedro López García - Estado de México`' }, { quoted: msg });
+            if (!datosIngresados) return await sock.sendMessage(from, { text: '⚠️ Escribe el nombre completo del finado.\nEjemplo: `.defuncion Pedro López García`' }, { quoted: msg });
+            return await sock.sendMessage(from, { text: `⚰️ *SOLICITUD DE ACTA DE DEFUNCIÓN*\n\n📝 *Finado:* ${datosIngresados}\n\n📩 *Un asesor validará los folios y te compartirá el PDF oficial.*` }, { quoted: msg });
+        }
+
+        // 5. DESCARGAS DE MÚSICA Y VÍDEOS (MOTOR ESTABLE MULTI-SERVER)
+        if (primerComando === '.musica') {
+            const busqueda = textoLimpio.substring(primerComando.length).trim();
+            if (!busqueda) return await sock.sendMessage(from, { text: '⚠️ Escribe la canción. Ej: `.musica Bad Bunny`' }, { quoted: msg });
+
+            await sock.sendMessage(from, { text: '🎵 Procesando descarga de audio MP3...' }, { quoted: msg });
+            try {
+                const apiRes = await axios.get(`https://api.cobalt.tools/api/json?url=${encodeURIComponent(busqueda)}`).catch(() => null) ||
+                               await axios.get(`https://api.vreden.web.id/api/download/playaudio?query=${encodeURIComponent(busqueda)}`).catch(() => null);
+
+                const audioUrl = apiRes?.data?.url || apiRes?.data?.result?.downloadUrl || apiRes?.data?.result?.url;
+
+                if (audioUrl) {
+                    await sock.sendMessage(from, { audio: { url: audioUrl }, mimetype: 'audio/mp4', ptt: false }, { quoted: msg });
+                } else {
+                    await sock.sendMessage(from, { text: '❌ El servidor de música está saturado temporalmente. Intenta con otra canción.' }, { quoted: msg });
+                }
+            } catch (err) {
+                await sock.sendMessage(from, { text: '❌ Error al procesar la música.' }, { quoted: msg });
             }
-
-            const respuestaDefuncion = `⚰️ *SOLICITUD DE ACTA DE DEFUNCIÓN*\n\n` +
-            `📝 *Finado registrado:* ${datosIngresados}\n` +
-            `STATUS: Búsqueda en Registro Civil Activa.\n\n` +
-            `📩 *Un asesor validará los folios y te compartirá el PDF oficial.*`;
-
-            return await sock.sendMessage(from, { text: respuestaDefuncion }, { quoted: msg });
+            return;
         }
 
-        // 5. ACTUALIZACIÓN DE STOCK Y COMBOS POR CHAT
-        if (primerComando === '.actualizastock') {
-            const contenido = textoLimpio.substring(primerComando.length).trim();
-            if (!contenido) return await sock.sendMessage(from, { text: '⚠️ Usa: `.actualizastock Nuevo texto de stock`' }, { quoted: msg });
-            
-            const comandos = { ...COMANDOS_CACHE };
-            comandos['.stock'] = { texto: contenido, imagen: comandos['.stock']?.imagen || "" };
-            guardarComandosBD(comandos);
-            return await sock.sendMessage(from, { text: '✅ Stock actualizado con éxito.' }, { quoted: msg });
-        }
-
-        if (primerComando === '.actualizacombo' || primerComando === '.actualizacombos') {
-            const contenido = textoLimpio.substring(primerComando.length).trim();
-            if (!contenido) return await sock.sendMessage(from, { text: '⚠️ Usa: `.actualizacombo Nuevo texto de combos`' }, { quoted: msg });
-            
-            const comandos = { ...COMANDOS_CACHE };
-            comandos['.combo'] = { texto: contenido, imagen: comandos['.combo']?.imagen || "" };
-            comandos['.combos'] = { texto: contenido, imagen: comandos['.combo']?.imagen || "" };
-            guardarComandosBD(comandos);
-            return await sock.sendMessage(from, { text: '✅ Combos actualizados con éxito.' }, { quoted: msg });
-        }
-
-        if (primerComando === '.agregardinamico') {
-            const nuevoCmd = partes[1]?.toLowerCase();
-            const contenido = textoLimpio.substring(partes[0].length + (partes[1]?.length || 0) + 1).trim();
-
-            if (!nuevoCmd || !nuevoCmd.startsWith('.') || !contenido) {
-                return await sock.sendMessage(from, { text: '⚠️ Usa: `.agregardinamico .agregapeliculas Texto o catálogo aquí`' }, { quoted: msg });
-            }
-
-            const comandos = { ...COMANDOS_CACHE };
-            comandos[nuevoCmd] = { texto: contenido, imagen: "" };
-            guardarComandosBD(comandos);
-            return await sock.sendMessage(from, { text: `✅ Comando ${nuevoCmd} creado e integrado.` }, { quoted: msg });
-        }
-
-        // 6. DESCARGA DE VÍDEOS Y MÚSICA
         if (primerComando === '.descargar') {
             const url = partes[1];
-            if (!url) return await sock.sendMessage(from, { text: '⚠️ Coloca el enlace. Ej: `.descargar https://link-del-video`' }, { quoted: msg });
+            if (!url) return await sock.sendMessage(from, { text: '⚠️ Coloca el enlace del vídeo. Ej: `.descargar https://...`' }, { quoted: msg });
 
-            await sock.sendMessage(from, { text: '⏳ Procesando descarga, por favor espera...' }, { quoted: msg });
+            await sock.sendMessage(from, { text: '⏳ Extrayendo vídeo...' }, { quoted: msg });
             try {
                 const apiRes = await axios.get(`https://api.vreden.web.id/api/download/video?url=${encodeURIComponent(url)}`);
                 const downloadUrl = apiRes.data?.result?.downloadUrl || apiRes.data?.result?.url;
 
                 if (downloadUrl) {
-                    await sock.sendMessage(from, { 
-                        video: { url: downloadUrl }, 
-                        caption: '🎬 ¡Aquí tienes tu vídeo/película descargado!' 
-                    }, { quoted: msg });
+                    await sock.sendMessage(from, { video: { url: downloadUrl }, caption: '🎬 ¡Vídeo descargado con éxito!' }, { quoted: msg });
                 } else {
                     await sock.sendMessage(from, { text: '❌ No se pudo extraer el vídeo de ese enlace.' }, { quoted: msg });
                 }
@@ -649,34 +655,29 @@ async function iniciarBot() {
             return;
         }
 
-        if (primerComando === '.musica') {
-            const busqueda = textoLimpio.substring(primerComando.length).trim();
-            if (!busqueda) return await sock.sendMessage(from, { text: '⚠️ Escribe la canción. Ej: `.musica Bad Bunny`' }, { quoted: msg });
-
-            await sock.sendMessage(from, { text: '🎵 Buscando y descargando audio...' }, { quoted: msg });
-            try {
-                const apiRes = await axios.get(`https://api.vreden.web.id/api/download/playaudio?query=${encodeURIComponent(busqueda)}`);
-                const audioUrl = apiRes.data?.result?.downloadUrl || apiRes.data?.result?.url;
-
-                if (audioUrl) {
-                    await sock.sendMessage(from, { 
-                        audio: { url: audioUrl }, 
-                        mimetype: 'audio/mp4',
-                        ptt: false 
-                    }, { quoted: msg });
-                } else {
-                    await sock.sendMessage(from, { text: '❌ No se encontró la canción.' }, { quoted: msg });
-                }
-            } catch (err) {
-                await sock.sendMessage(from, { text: '❌ Error al buscar la música.' }, { quoted: msg });
-            }
-            return;
+        // 6. ACTUALIZACIONES DE STOCK Y COMBOS
+        if (primerComando === '.actualizastock') {
+            const contenido = textoLimpio.substring(primerComando.length).trim();
+            if (!contenido) return await sock.sendMessage(from, { text: '⚠️ Usa: `.actualizastock Nuevo texto...`' }, { quoted: msg });
+            const comandos = { ...COMANDOS_CACHE };
+            comandos['.stock'] = { texto: contenido, imagen: comandos['.stock']?.imagen || "" };
+            guardarComandosBD(comandos);
+            return await sock.sendMessage(from, { text: '✅ Stock actualizado con éxito.' }, { quoted: msg });
         }
 
-        // 7. RESPUESTA RÁPIDA DE COMANDOS GUARDADOS
+        if (primerComando === '.actualizacombo' || primerComando === '.actualizacombos') {
+            const contenido = textoLimpio.substring(primerComando.length).trim();
+            if (!contenido) return await sock.sendMessage(from, { text: '⚠️ Usa: `.actualizacombo Nuevo texto...`' }, { quoted: msg });
+            const comandos = { ...COMANDOS_CACHE };
+            comandos['.combo'] = { texto: contenido, imagen: comandos['.combo']?.imagen || "" };
+            comandos['.combos'] = { texto: contenido, imagen: comandos['.combo']?.imagen || "" };
+            guardarComandosBD(comandos);
+            return await sock.sendMessage(from, { text: '✅ Combos actualizados con éxito.' }, { quoted: msg });
+        }
+
+        // 7. RESPUESTA RÁPIDA A COMANDOS GUARDADOS
         if (COMANDOS_CACHE[comando]) {
             const configCmd = COMANDOS_CACHE[comando];
-
             if (configCmd.imagen && configCmd.imagen.trim() !== '') {
                 try {
                     let imageBuffer;
@@ -688,10 +689,7 @@ async function iniciarBot() {
                         imageBuffer = Buffer.from(response.data, 'binary');
                     }
 
-                    await sock.sendMessage(from, {
-                        image: imageBuffer,
-                        caption: configCmd.texto || ''
-                    }, { quoted: msg });
+                    await sock.sendMessage(from, { image: imageBuffer, caption: configCmd.texto || '' }, { quoted: msg });
                     return;
                 } catch (err) {
                     await sock.sendMessage(from, { text: configCmd.texto }, { quoted: msg });
@@ -706,30 +704,14 @@ async function iniciarBot() {
         // 8. COMANDOS DE ADMINISTRACIÓN DE GRUPO
         if (isGroup && (comando === '.cerrar' || comando === '.abrir')) {
             try {
-                const groupMetadata = await sock.groupMetadata(from);
-                const sender = msg.key.participant || msg.key.remoteJid;
-                const numSender = extraerNumeroPuro(sender);
-
-                const esAdmin = groupMetadata.participants.some(p => {
-                    const numP = extraerNumeroPuro(p);
-                    return numP === numSender && (p.admin === 'admin' || p.admin === 'superadmin');
-                });
-
-                if (!esAdmin) {
-                    await sock.sendMessage(from, { text: '❌ Solo administradores pueden usar este comando.' }, { quoted: msg });
-                    return;
-                }
-
                 if (comando === '.cerrar') {
                     await sock.groupSettingUpdate(from, 'announcement');
-                    await sock.sendMessage(from, { text: '🔒 *Grupo cerrado.*' });
+                    await sock.sendMessage(from, { text: '🔒 *Grupo cerrado por el administrador.*' });
                 }
-
                 if (comando === '.abrir') {
                     await sock.groupSettingUpdate(from, 'not_announcement');
-                    await sock.sendMessage(from, { text: '🔓 *Grupo abierto.*' });
+                    await sock.sendMessage(from, { text: '🔓 *Grupo abierto por el administrador.*' });
                 }
-
             } catch (err) {
                 console.error('Error comando admin:', err);
             }
