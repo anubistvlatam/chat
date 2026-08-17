@@ -65,11 +65,11 @@ function guardarComandosBD(comandos) {
 
 inicializarComandos();
 
-// Función auxiliar para extraer el JID limpio de forma segura
-function obtenerJidLimpio(participante) {
-    if (!participante) return '';
-    const idStr = typeof participante === 'string' ? participante : (participante.id || '');
-    return idStr.split(':')[0].split('@')[0] + '@s.whatsapp.net';
+// Función auxiliar para extraer solo los números puros del número telefónico
+function extraerNumeroPuro(jidOrObj) {
+    if (!jidOrObj) return '';
+    const str = typeof jidOrObj === 'string' ? jidOrObj : (jidOrObj.id || '');
+    return str.split('@')[0].split(':')[0];
 }
 
 // ==================== SERVIDOR WEB Y PANEL ====================
@@ -385,10 +385,10 @@ async function iniciarBot() {
     // ==================== DETECCION DE RANGO ADMIN Y BIENVENIDA CON CANCIÓN ====================
     sock.ev.on('group-participants.update', async (update) => {
         const { id, participants, action } = update;
-        const botJid = obtenerJidLimpio(sock.user);
+        const numBot = extraerNumeroPuro(sock.user);
 
         if (action === 'promote') {
-            const botFuePromovido = participants.some(p => obtenerJidLimpio(p) === botJid);
+            const botFuePromovido = participants.some(p => extraerNumeroPuro(p) === numBot);
 
             if (botFuePromovido) {
                 console.log(`🎉 Bot ascendido a Admin en el grupo: ${id}`);
@@ -404,8 +404,8 @@ async function iniciarBot() {
             try {
                 const groupMetadata = await sock.groupMetadata(id);
                 const botEsAdmin = groupMetadata.participants.some(p => {
-                    const pClean = obtenerJidLimpio(p);
-                    return pClean === botJid && (p.admin === 'admin' || p.admin === 'superadmin');
+                    const numP = extraerNumeroPuro(p);
+                    return numP === numBot && (p.admin === 'admin' || p.admin === 'superadmin');
                 });
 
                 if (!botEsAdmin) return;
@@ -477,27 +477,23 @@ async function iniciarBot() {
         const partes = textoLimpio.split(' ');
         const primerComando = partes[0].toLowerCase();
 
-        // Si empieza con punto, registramos en consola
-        if (primerComando.startsWith('.')) {
-            console.log(`📩 Comando recibido: "${textoLimpio}" en grupo/chat: ${from}`);
-        }
-
         if (isGroup) {
             try {
                 const groupMetadata = await sock.groupMetadata(from);
-                const botJid = obtenerJidLimpio(sock.user);
+                const numBot = extraerNumeroPuro(sock.user);
+                
+                // Comparamos numéricamente sin importar si es @s.whatsapp.net o @lid
                 const botEsAdmin = groupMetadata.participants.some(p => {
-                    const pClean = obtenerJidLimpio(p);
-                    return pClean === botJid && (p.admin === 'admin' || p.admin === 'superadmin');
+                    const numP = extraerNumeroPuro(p);
+                    return numP === numBot && (p.admin === 'admin' || p.admin === 'superadmin');
                 });
 
                 if (!botEsAdmin) {
-                    console.log(`⚠️ Ignorando comando "${primerComando}": El bot NO es administrador en este grupo.`);
+                    console.log(`⚠️ Ignorando "${primerComando}": El bot con número (${numBot}) no figura como admin en los metadatos.`);
                     return;
                 }
             } catch (e) {
-                console.error('⚠️ Error al verificar permisos de grupo:', e.message);
-                // Si la metadata de grupo falla momentáneamente, permitimos continuar
+                console.error('⚠️ Error al obtener metadatos del grupo:', e.message);
             }
         }
 
@@ -697,11 +693,11 @@ async function iniciarBot() {
             try {
                 const groupMetadata = await sock.groupMetadata(from);
                 const sender = msg.key.participant || msg.key.remoteJid;
-                const senderClean = obtenerJidLimpio(sender);
+                const numSender = extraerNumeroPuro(sender);
 
                 const esAdmin = groupMetadata.participants.some(p => {
-                    const pClean = obtenerJidLimpio(p);
-                    return pClean === senderClean && (p.admin === 'admin' || p.admin === 'superadmin');
+                    const numP = extraerNumeroPuro(p);
+                    return numP === numSender && (p.admin === 'admin' || p.admin === 'superadmin');
                 });
 
                 if (!esAdmin) {
