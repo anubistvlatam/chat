@@ -65,11 +65,17 @@ function guardarComandosBD(comandos) {
 
 inicializarComandos();
 
-// Función auxiliar para extraer solo los números puros del número telefónico
+// Función de limpieza universal de números (Soporta México y cualquier país del mundo)
 function extraerNumeroPuro(jidOrObj) {
     if (!jidOrObj) return '';
     const str = typeof jidOrObj === 'string' ? jidOrObj : (jidOrObj.id || '');
-    return str.split('@')[0].split(':')[0];
+    let num = str.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+    
+    // Si es un número de México con prefijo antiguo (521), lo normaliza a 52
+    if (num.startsWith('521') && num.length === 13) {
+        num = '52' + num.substring(3);
+    }
+    return num;
 }
 
 // ==================== SERVIDOR WEB Y PANEL ====================
@@ -482,7 +488,7 @@ async function iniciarBot() {
                 const groupMetadata = await sock.groupMetadata(from);
                 const numBot = extraerNumeroPuro(sock.user);
                 
-                // Comparamos numéricamente sin importar si es @s.whatsapp.net o @lid
+                // Comparamos el número limpio del bot contra todos los admins del grupo
                 const botEsAdmin = groupMetadata.participants.some(p => {
                     const numP = extraerNumeroPuro(p);
                     return numP === numBot && (p.admin === 'admin' || p.admin === 'superadmin');
