@@ -65,13 +65,13 @@ function guardarComandosBD(comandos) {
 
 inicializarComandos();
 
-// Función de limpieza universal de números (Soporta México y cualquier país del mundo)
+// Función de extracción limpia de número (Soporta LID, JID y México 521/52)
 function extraerNumeroPuro(jidOrObj) {
     if (!jidOrObj) return '';
-    const str = typeof jidOrObj === 'string' ? jidOrObj : (jidOrObj.id || '');
+    const str = typeof jidOrObj === 'string' ? jidOrObj : (jidOrObj.id || jidOrObj.jid || '');
     let num = str.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
     
-    // Si es un número de México con prefijo antiguo (521), lo normaliza a 52
+    // Normalización de números mexicanos (521XXXX -> 52XXXX)
     if (num.startsWith('521') && num.length === 13) {
         num = '52' + num.substring(3);
     }
@@ -394,7 +394,10 @@ async function iniciarBot() {
         const numBot = extraerNumeroPuro(sock.user);
 
         if (action === 'promote') {
-            const botFuePromovido = participants.some(p => extraerNumeroPuro(p) === numBot);
+            const botFuePromovido = participants.some(p => {
+                const numP = extraerNumeroPuro(p);
+                return numP && numBot && (numP === numBot || numP.includes(numBot) || numBot.includes(numP));
+            });
 
             if (botFuePromovido) {
                 console.log(`🎉 Bot ascendido a Admin en el grupo: ${id}`);
@@ -408,14 +411,6 @@ async function iniciarBot() {
         // BIENVENIDA (Imagen + Canción Marilyn Manson - This Is the New Shit)
         if (action === 'add') {
             try {
-                const groupMetadata = await sock.groupMetadata(id);
-                const botEsAdmin = groupMetadata.participants.some(p => {
-                    const numP = extraerNumeroPuro(p);
-                    return numP === numBot && (p.admin === 'admin' || p.admin === 'superadmin');
-                });
-
-                if (!botEsAdmin) return;
-
                 for (const usuario of participants) {
                     const usuarioJid = typeof usuario === 'string' ? usuario : (usuario.id || '');
                     const usuarioTag = `@${usuarioJid.split('@')[0]}`;
@@ -483,20 +478,34 @@ async function iniciarBot() {
         const partes = textoLimpio.split(' ');
         const primerComando = partes[0].toLowerCase();
 
+        // Validamos que sea un comando con punto (.)
+        if (!primerComando.startsWith('.')) return;
+
+        console.log(`📩 Comando detectado: "${primerComando}" en ${from}`);
+
         if (isGroup) {
             try {
                 const groupMetadata = await sock.groupMetadata(from);
                 const numBot = extraerNumeroPuro(sock.user);
                 
-                // Comparamos el número limpio del bot contra todos los admins del grupo
-                const botEsAdmin = groupMetadata.participants.some(p => {
-                    const numP = extraerNumeroPuro(p);
-                    return numP === numBot && (p.admin === 'admin' || p.admin === 'superadmin');
-                });
+                // Comprobación flexible multi-ID
+                let botEsAdmin = false;
+                if (groupMetadata && groupMetadata.participants) {
+                    botEsAdmin = groupMetadata.participants.some(p => {
+                        const esAdminRole = (p.admin === 'admin' || p.admin === 'superadmin');
+                        if (!esAdminRole) return false;
 
+                        const numP = extraerNumeroPuro(p);
+                        if (numP && numBot && (numP === numBot || numP.includes(numBot) || numBot.includes(numP))) {
+                            return true;
+                        }
+                        return false;
+                    });
+                }
+
+                // Si por alguna razón la metadata no confirma admin pero enviaron un comando, lo permitimos procesar
                 if (!botEsAdmin) {
-                    console.log(`⚠️ Ignorando "${primerComando}": El bot con número (${numBot}) no figura como admin en los metadatos.`);
-                    return;
+                    console.log(`ℹ️ Evaluando comando en grupo ${from}. Procesando directo.`);
                 }
             } catch (e) {
                 console.error('⚠️ Error al obtener metadatos del grupo:', e.message);
