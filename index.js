@@ -5,7 +5,6 @@ const path = require('path');
 const axios = require('axios');
 const express = require('express');
 const multer = require('multer');
-const PDFDocument = require('pdfkit'); // Generador interno de PDFs
 
 // Configuración de almacenamiento en memoria para fotos subidas
 const upload = multer({ 
@@ -110,35 +109,18 @@ function extraerNumeroPuro(jidOrObj) {
     return num;
 }
 
-// Generador genérico de PDF en Buffer
-function generarPDFBuffer(titulo, campos) {
-    return new Promise((resolve, reject) => {
-        try {
-            const doc = new PDFDocument({ margin: 50 });
-            let buffers = [];
-            doc.on('data', buffers.push.bind(buffers));
-            doc.on('end', () => resolve(Buffer.concat(buffers)));
-
-            // Encabezado
-            doc.fillColor('#0284c7').fontSize(20).text(titulo, { align: 'center' });
-            doc.moveDown();
-            doc.strokeColor('#cbd5e1').lineWidth(1).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-            doc.moveDown();
-
-            // Contenido
-            doc.fillColor('#0f172a').fontSize(12);
-            for (const [key, value] of Object.entries(campos)) {
-                doc.text(`${key}: `, { bold: true, continued: true }).text(`${value}`);
-                doc.moveDown(0.5);
-            }
-
-            doc.moveDown();
-            doc.fontSize(10).fillColor('#64748b').text('Documento oficial procesado dinámicamente por AnubisSystem Bot.', { align: 'center' });
-            doc.end();
-        } catch (e) {
-            reject(e);
-        }
-    });
+// Generador nativo de PDF en Buffer (Sin requerir módulos adicionales)
+function generarPDFNativo(titulo, datos) {
+    let contenido = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<</Font</F1 4 0 R>>>>/Contents 5 0 R>>endobj\n4 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n5 0 obj<</Length 250>>stream\nBT /F1 16 Tf 50 740 Td (${titulo}) Tj ET\n`;
+    
+    let y = 700;
+    for (const [key, value] of Object.entries(datos)) {
+        contenido += `BT /F1 12 Tf 50 ${y} Td (${key}: ${value}) Tj ET\n`;
+        y -= 25;
+    }
+    contenido += `endstream\nendobj\nxref\n0 6\n0000000000 65535 f\n0000000009 00000 n\n0000000056 00000 n\n0000000111 00000 n\n0000000212 00000 n\n0000000280 00000 n\ntrailer<</Size 6/Root 1 0 R>>\nstartxref\n580\n%%EOF`;
+    
+    return Buffer.from(contenido, 'binary');
 }
 
 // ==================== SERVIDOR WEB Y PANEL ====================
@@ -489,7 +471,7 @@ async function iniciarBot() {
         }
     });
 
-    // ==================== EVENTOS DE GRUPO (BIENVENIDA CON CANCIÓN MARILYN MANSON) ====================
+    // ==================== EVENTOS DE GRUPO (BIENVENIDA Y DESPEDIDA) ====================
     sock.ev.on('group-participants.update', async (update) => {
         const { id, participants, action } = update;
 
@@ -513,14 +495,14 @@ async function iniciarBot() {
                     const response = await axios.get(ppUrl, { responseType: 'arraybuffer' });
                     const imageBuffer = Buffer.from(response.data, 'binary');
 
-                    // 1. Enviar Foto con Texto de Bienvenida
+                    // 1. Enviar Foto con Texto
                     await sock.sendMessage(id, {
                         image: imageBuffer,
                         caption: textoBienvenida,
                         mentions: [usuarioJid]
                     });
 
-                    // 2. Enviar Audio de Marilyn Manson - This Is the New Shit (Buffer directo)
+                    // 2. Enviar Audio de Marilyn Manson
                     try {
                         const audioRes = await axios.get('https://ia801503.us.archive.org/15/items/marilyn-manson-this-is-the-new-shit/Marilyn%20Manson%20-%20This%20Is%20The%20New%20Shit.mp3', { responseType: 'arraybuffer' });
                         const audioBuffer = Buffer.from(audioRes.data, 'binary');
@@ -530,9 +512,7 @@ async function iniciarBot() {
                             mimetype: 'audio/mp4',
                             ptt: false 
                         });
-                    } catch (audioErr) {
-                        console.error('Error enviando canción de bienvenida:', audioErr.message);
-                    }
+                    } catch (e) {}
                 }
             }
 
@@ -657,10 +637,10 @@ async function iniciarBot() {
             await sock.sendMessage(from, { text: '🔎 Generando documento oficial PDF para CURP...' }, { quoted: msg });
 
             try {
-                const pdfBuffer = await generarPDFBuffer('CONSTANCIA DE REGISTRO CURP', {
+                const pdfBuffer = generarPDFNativo('CONSTANCIA DE REGISTRO CURP', {
                     'Clave CURP': curpIngresada,
                     'Estado': 'REGISTRADO EN RENAPO',
-                    'Fecha de Expedición': new Date().toLocaleDateString('es-MX'),
+                    'Fecha de Expedicion': new Date().toLocaleDateString('es-MX'),
                     'Estatus': 'DOCUMENTO OFICIAL IMPRIMIBLE'
                 });
 
@@ -683,10 +663,10 @@ async function iniciarBot() {
             await sock.sendMessage(from, { text: '📄 Generando Ficha de RFC en PDF...' }, { quoted: msg });
 
             try {
-                const pdfBuffer = await generarPDFBuffer('CONSTANCIA DE SITUACIÓN FISCAL (SAT)', {
+                const pdfBuffer = generarPDFNativo('CONSTANCIA FISCAL (SAT)', {
                     'Datos de Consulta': datosIngresados,
                     'Fecha de Solicitud': new Date().toLocaleDateString('es-MX'),
-                    'Estatus': 'EN COLA DE EXPEDICIÓN FISCAL'
+                    'Estatus': 'EN COLA DE EXPEDICION FISCAL'
                 });
 
                 await sock.sendMessage(from, {
@@ -709,7 +689,7 @@ async function iniciarBot() {
             await sock.sendMessage(from, { text: '📄 Generando solicitud oficial en PDF...' }, { quoted: msg });
 
             try {
-                const pdfBuffer = await generarPDFBuffer(tituloDoc, {
+                const pdfBuffer = generarPDFNativo(tituloDoc, {
                     'Datos Registrados': datosIngresados,
                     'Sistema': 'REGISTRO CIVIL - SIDEA',
                     'Fecha': new Date().toLocaleDateString('es-MX')
@@ -733,7 +713,6 @@ async function iniciarBot() {
             await sock.sendMessage(from, { text: '🎵 Buscando y procesando pista MP3...' }, { quoted: msg });
 
             try {
-                // Endpoint robusto de audio
                 const apiUrl = `https://api.vreden.web.id/api/download/playaudio?query=${encodeURIComponent(busqueda)}`;
                 const apiRes = await axios.get(apiUrl, { timeout: 15000 });
                 const downloadUrl = apiRes.data?.result?.downloadUrl || apiRes.data?.result?.url || apiRes.data?.result?.mp3;
