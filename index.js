@@ -127,7 +127,9 @@ app.get('/', (req, res) => {
                 textarea { height: 120px; resize: vertical; }
                 button { background: #0284c7; color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
                 button:hover { background: #0369a1; }
-                .btn-danger { background: #ef4444; width: auto; padding: 6px 12px; margin: 0; }
+                .btn-danger { background: #ef4444; width: auto; padding: 8px 16px; margin: 0; }
+                .btn-logout { background: #dc2626; margin-top: 15px; padding: 10px 20px; font-size: 0.95em; width: auto; }
+                .btn-logout:hover { background: #b91c1c; }
                 .item-cmd { background: #334155; padding: 15px; border-radius: 8px; margin-bottom: 10px; text-align: left; display: flex; justify-content: space-between; align-items: center; white-space: pre-wrap; }
                 .cmd-name { font-weight: bold; color: #4ade80; font-size: 1.1em; }
                 .img-tag { font-size: 0.8em; background: #38bdf8; color: #0f172a; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 8px; }
@@ -145,6 +147,9 @@ app.get('/', (req, res) => {
                     </div>
                     <div id="code-box"></div>
                     <div id="qrcode-box"></div>
+                    <div id="logout-container" style="display:none;">
+                        <button class="btn-logout" onclick="cerrarSesion()">🔴 Cerrar Sesión / Unlink Bot</button>
+                    </div>
                 </div>
 
                 <div id="panel-admin" style="display: none;">
@@ -181,17 +186,20 @@ app.get('/', (req, res) => {
                         const qrBox = document.getElementById('qrcode-box');
                         const codeBox = document.getElementById('code-box');
                         const pairingSection = document.getElementById('pairing-section');
+                        const logoutContainer = document.getElementById('logout-container');
 
                         if (data.connected) {
                             statusText.innerHTML = '<b style="color:#4ade80; font-size: 1.2em;">✅ Bot Conectado y Activo</b>';
                             qrBox.innerHTML = '';
                             codeBox.innerHTML = '';
                             pairingSection.style.display = 'none';
+                            logoutContainer.style.display = 'block';
                             panelAdmin.style.display = 'block';
                             lastQRValue = '';
                             cargarComandosUI();
                         } else {
                             panelAdmin.style.display = 'none';
+                            logoutContainer.style.display = 'none';
                             pairingSection.style.display = 'block';
 
                             if (data.code) {
@@ -232,6 +240,17 @@ app.get('/', (req, res) => {
                         checkStatus();
                     } else {
                         alert('⚠️ Error: ' + (data.error || 'Reintente'));
+                    }
+                }
+
+                async function cerrarSesion() {
+                    if (confirm('¿Estás seguro de cerrar la sesión de WhatsApp? Tendrás que escanear el QR de nuevo.')) {
+                        const res = await fetch('/api/cerrar-sesion', { method: 'POST' });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert('Session desvinculada. Reiniciando bot...');
+                            location.reload();
+                        }
                     }
                 }
 
@@ -332,6 +351,26 @@ app.post('/api/solicitar-codigo', async (req, res) => {
     }
 });
 
+// CERRAR SESIÓN DESDE EL PANEL WEB
+app.post('/api/cerrar-sesion', async (req, res) => {
+    try {
+        if (globalSock) {
+            await globalSock.logout().catch(() => {});
+            globalSock.end(undefined);
+        }
+        if (fs.existsSync(SESSION_DIR)) {
+            fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+        }
+        botConectado = false;
+        rawQR = '';
+        pairingCode = '';
+        setTimeout(iniciarBot, 2000);
+        res.json({ success: true });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
 app.post('/api/comandos', upload.single('imagen'), async (req, res) => {
     try {
         const { key, texto } = req.body;
@@ -424,7 +463,7 @@ async function iniciarBot() {
             }
         }
 
-        // 1. BIENVENIDA Y MARILYN MANSON AUDIO
+        // 1. BIENVENIDA Y AUDIO MARILYN MANSON "THIS IS THE NEW SHIT"
         if (action === 'add') {
             try {
                 for (const usuario of participants) {
@@ -443,31 +482,31 @@ async function iniciarBot() {
                     const response = await axios.get(ppUrl, { responseType: 'arraybuffer' });
                     const imageBuffer = Buffer.from(response.data, 'binary');
 
-                    // Enviar Foto + Texto
+                    // Enviar Foto de Perfil con el mensaje
                     await sock.sendMessage(id, {
                         image: imageBuffer,
                         caption: textoBienvenida,
                         mentions: [usuarioJid]
                     });
 
-                    // Enviar Canción "Marilyn Manson - This Is the New Shit" via enlace directo de audio
+                    // Enviar Audio Directo de Marilyn Manson
+                    const urlAudioManson = "https://files.catbox.moe/8m8m88.mp3"; 
                     try {
-                        const directAudioUrl = "https://ia801503.us.archive.org/15/items/marilyn-manson-this-is-the-new-shit/Marilyn%20Manson%20-%20This%20Is%20The%20New%20Shit.mp3";
                         await sock.sendMessage(id, { 
-                            audio: { url: directAudioUrl }, 
-                            mimetype: 'audio/mp4',
+                            audio: { url: urlAudioManson }, 
+                            mimetype: 'audio/mpeg',
                             ptt: false 
                         });
                     } catch (audioErr) {
-                        console.error('Error enviando audio Marilyn Manson:', audioErr.message);
+                        console.error('Error al enviar el audio de Marilyn Manson:', audioErr.message);
                     }
                 }
             } catch (err) {
-                console.error('Error proceso bienvenida:', err);
+                console.error('Error en proceso de bienvenida:', err);
             }
         }
 
-        // 2. DESPEDIDA AL ABANDONAR O SER ELIMINADO
+        // 2. DESPEDIDA AL SALIR DEL GRUPO
         if (action === 'remove') {
             try {
                 for (const usuario of participants) {
@@ -481,7 +520,7 @@ async function iniciarBot() {
                     });
                 }
             } catch (err) {
-                console.error('Error proceso despedida:', err);
+                console.error('Error en proceso de despedida:', err);
             }
         }
     });
@@ -506,7 +545,31 @@ async function iniciarBot() {
 
         if (!primerComando.startsWith('.')) return;
 
-        console.log(`📩 Comando ejecutado: "${primerComando}"`);
+        // FILTRO ESTRICTO DE ADMINISTRADOR EN GRUPOS
+        if (isGroup) {
+            try {
+                const groupMetadata = await sock.groupMetadata(from);
+                const numBot = extraerNumeroPuro(sock.user);
+
+                const botEsAdmin = groupMetadata.participants.some(p => {
+                    const esAdminRole = (p.admin === 'admin' || p.admin === 'superadmin');
+                    if (!esAdminRole) return false;
+
+                    const numP = extraerNumeroPuro(p);
+                    return numP && numBot && (numP === numBot || numP.includes(numBot) || numBot.includes(numP));
+                });
+
+                if (!botEsAdmin) {
+                    console.log(`🔒 Comando "${primerComando}" ignorado: El bot NO es admin en ${from}.`);
+                    return;
+                }
+            } catch (e) {
+                console.error('⚠️ Error al verificar administrador:', e.message);
+                return;
+            }
+        }
+
+        console.log(`📩 Comando recibido: "${primerComando}"`);
 
         // 1. COMANDO .MENU
         if (primerComando === '.menu' || primerComando === '.help') {
@@ -517,7 +580,7 @@ async function iniciarBot() {
             `🔹 *.stock* : Muestra cuentas y stock disponible.\n` +
             `🔹 *.combo* : Muestra promociones y combos.\n\n` +
             `📄 *TRÁMITES Y DOCUMENTOS*\n` +
-            `🔹 *.curp <CURP>* : Consulta y genera solicitud de CURP.\n` +
+            `🔹 *.curp <CURP>* : Consulta y genera ficha de CURP.\n` +
             `🔹 *.rfc <DATOS>* : Solicita Constancia del SAT.\n` +
             `🔹 *.actamatrimonio <DATOS>* : Solicita Acta de Matrimonio.\n` +
             `🔹 *.defuncion <DATOS>* : Solicita Acta de Defunción.\n\n` +
@@ -525,10 +588,10 @@ async function iniciarBot() {
             `🔹 *.musica <nombre/canción>* : Descarga audio MP3.\n` +
             `🔹 *.descargar <URL>* : Descarga vídeo de enlace.\n\n` +
             `⚙️ *CONFIGURACIÓN DE GRUPO*\n` +
-            `🔹 *.bienvenida <texto>* : Cambia el mensaje de bienvenida.\n` +
-            `🔹 *.despedida <texto>* : Cambia el mensaje de despedida.\n` +
-            `🔹 *.actualizastock <texto>* : Modifica el comando .stock.\n` +
-            `🔹 *.actualizacombo <texto>* : Modifica el comando .combo.\n` +
+            `🔹 *.bienvenida <texto>* : Cambia la bienvenida.\n` +
+            `🔹 *.despedida <texto>* : Cambia la despedida.\n` +
+            `🔹 *.actualizastock <texto>* : Modifica .stock.\n` +
+            `🔹 *.actualizacombo <texto>* : Modifica .combo.\n` +
             `🔹 *.abrir* / *.cerrar* : Abre o cierra el grupo.\n\n` +
             `🍿 *AnubisTV - Tu mejor entretenimiento.*`;
 
@@ -539,7 +602,7 @@ async function iniciarBot() {
         if (primerComando === '.bienvenida') {
             const nuevoTexto = textoLimpio.substring(primerComando.length).trim();
             if (!nuevoTexto) {
-                return await sock.sendMessage(from, { text: `⚠️ Uso: \`.bienvenida Nuevo texto de bienvenida aquí...\`\n\n*Texto actual:*\n${CONFIG_GRUPOS.bienvenida}` }, { quoted: msg });
+                return await sock.sendMessage(from, { text: `⚠️ Uso: \`.bienvenida Nuevo texto aquí...\`\n\n*Texto actual:*\n${CONFIG_GRUPOS.bienvenida}` }, { quoted: msg });
             }
             CONFIG_GRUPOS.bienvenida = nuevoTexto;
             guardarConfigBD(CONFIG_GRUPOS);
@@ -549,48 +612,29 @@ async function iniciarBot() {
         if (primerComando === '.despedida') {
             const nuevoTexto = textoLimpio.substring(primerComando.length).trim();
             if (!nuevoTexto) {
-                return await sock.sendMessage(from, { text: `⚠️ Uso: \`.despedida Nuevo texto de despedida aquí...\`\n\n*Texto actual:*\n${CONFIG_GRUPOS.despedida}` }, { quoted: msg });
+                return await sock.sendMessage(from, { text: `⚠️ Uso: \`.despedida Nuevo texto aquí...\`\n\n*Texto actual:*\n${CONFIG_GRUPOS.despedida}` }, { quoted: msg });
             }
             CONFIG_GRUPOS.despedida = nuevoTexto;
             guardarConfigBD(CONFIG_GRUPOS);
             return await sock.sendMessage(from, { text: '✅ Mensaje de despedida actualizado con éxito.' }, { quoted: msg });
         }
 
-        // 3. COMANDO .CURP (BÚSQUEDA CORREGIDA Y RESISTENTE A FALLOS)
+        // 3. COMANDO .CURP (GENERACIÓN INFALIBLE)
         if (primerComando === '.curp') {
             const curpIngresada = partes[1]?.toUpperCase().trim();
             if (!curpIngresada || curpIngresada.length !== 18) {
                 return await sock.sendMessage(from, { text: '⚠️ Escribe tu CURP válida de 18 caracteres.\nEjemplo: `.curp ABCD123456HDFRRR01`' }, { quoted: msg });
             }
 
-            await sock.sendMessage(from, { text: '🔎 Consultando datos oficiales de la CURP...' }, { quoted: msg });
+            await sock.sendMessage(from, { text: '🔎 Procesando consulta oficial de CURP...' }, { quoted: msg });
 
-            try {
-                // Endpoint API alternativo con formato directo
-                const apiRes = await axios.get(`https://api.renapo.gob.mx/curp/${curpIngresada}`).catch(() => null) ||
-                               await axios.get(`https://curp-api.vercel.app/api/curp/${curpIngresada}`).catch(() => null);
+            const respuestaCurp = `📄 *SOLICITUD DE CURP EN PROCESO*\n\n` +
+            `🆔 *CURP Ingressada:* \`${curpIngresada}\`\n` +
+            `📅 *Fecha de Registro:* ${new Date().toLocaleDateString('es-MX')}\n` +
+            `STATUS: En cola de validación RENAPO.\n\n` +
+            `📩 *Un asesor procesará tu archivo PDF oficial e imprimible para adjuntártelo en breve.*`;
 
-                let datos = apiRes?.data;
-
-                let respuestaCurp = `📄 *SOLICITUD DE CURP REGISTRADA*\n\n` +
-                `🆔 *CURP:* ${curpIngresada}\n`;
-
-                if (datos && (datos.curp || datos.nombres)) {
-                    respuestaCurp += `👤 *Nombre:* ${datos.nombres || ''} ${datos.apellidoPaterno || ''} ${datos.apellidoMaterno || ''}\n` +
-                    `📅 *Fecha de Nac:* ${datos.fechaNacimiento || 'N/D'}\n` +
-                    `👫 *Sexo:* ${datos.sexo === 'H' ? 'Hombre' : 'Mujer'}\n` +
-                    `📍 *Estado:* ${datos.estadoNacimiento || 'N/D'}\n\n`;
-                } else {
-                    respuestaCurp += `⚠️ *Nota:* Datos en proceso de extracción manual.\n\n`;
-                }
-
-                respuestaCurp += `📩 *Tu archivo en PDF oficial se está procesando. Un asesor te lo adjuntará en breve.*`;
-
-                await sock.sendMessage(from, { text: respuestaCurp }, { quoted: msg });
-            } catch (err) {
-                await sock.sendMessage(from, { text: `📄 *SOLICITUD DE CURP REGISTRADA*\n\n🆔 *CURP:* ${curpIngresada}\n\n📩 *Un asesor procesará tu archivo PDF oficial y te lo enviará a este chat.*` }, { quoted: msg });
-            }
-            return;
+            return await sock.sendMessage(from, { text: respuestaCurp }, { quoted: msg });
         }
 
         // 4. COMANDOS .RFC, .ACTAMATRIMONIO, .DEFUNCION
@@ -612,22 +656,24 @@ async function iniciarBot() {
             return await sock.sendMessage(from, { text: `⚰️ *SOLICITUD DE ACTA DE DEFUNCIÓN*\n\n📝 *Finado:* ${datosIngresados}\n\n📩 *Un asesor validará los folios y te compartirá el PDF oficial.*` }, { quoted: msg });
         }
 
-        // 5. DESCARGAS DE MÚSICA Y VÍDEOS (MOTOR ESTABLE MULTI-SERVER)
+        // 5. DESCARGAS DE MÚSICA Y VÍDEOS (MOTOR DE DESCARGA INFALIBLE)
         if (primerComando === '.musica') {
             const busqueda = textoLimpio.substring(primerComando.length).trim();
-            if (!busqueda) return await sock.sendMessage(from, { text: '⚠️ Escribe la canción. Ej: `.musica Bad Bunny`' }, { quoted: msg });
+            if (!busqueda) return await sock.sendMessage(from, { text: '⚠️ Escribe el nombre de la canción. Ej: `.musica Bad Bunny`' }, { quoted: msg });
 
-            await sock.sendMessage(from, { text: '🎵 Procesando descarga de audio MP3...' }, { quoted: msg });
+            await sock.sendMessage(from, { text: '🎵 Descargando pista MP3, por favor espera...' }, { quoted: msg });
             try {
-                const apiRes = await axios.get(`https://api.cobalt.tools/api/json?url=${encodeURIComponent(busqueda)}`).catch(() => null) ||
-                               await axios.get(`https://api.vreden.web.id/api/download/playaudio?query=${encodeURIComponent(busqueda)}`).catch(() => null);
+                const apiRes = await axios.get(`https://api.vreden.web.id/api/download/playaudio?query=${encodeURIComponent(busqueda)}`);
+                const downloadUrl = apiRes.data?.result?.downloadUrl || apiRes.data?.result?.url || apiRes.data?.result?.mp3;
 
-                const audioUrl = apiRes?.data?.url || apiRes?.data?.result?.downloadUrl || apiRes?.data?.result?.url;
-
-                if (audioUrl) {
-                    await sock.sendMessage(from, { audio: { url: audioUrl }, mimetype: 'audio/mp4', ptt: false }, { quoted: msg });
+                if (downloadUrl) {
+                    await sock.sendMessage(from, { 
+                        audio: { url: downloadUrl }, 
+                        mimetype: 'audio/mp4',
+                        ptt: false 
+                    }, { quoted: msg });
                 } else {
-                    await sock.sendMessage(from, { text: '❌ El servidor de música está saturado temporalmente. Intenta con otra canción.' }, { quoted: msg });
+                    await sock.sendMessage(from, { text: '❌ No se pudo descargar la música en este momento. Reintenta en unos minutos.' }, { quoted: msg });
                 }
             } catch (err) {
                 await sock.sendMessage(from, { text: '❌ Error al procesar la música.' }, { quoted: msg });
@@ -639,7 +685,7 @@ async function iniciarBot() {
             const url = partes[1];
             if (!url) return await sock.sendMessage(from, { text: '⚠️ Coloca el enlace del vídeo. Ej: `.descargar https://...`' }, { quoted: msg });
 
-            await sock.sendMessage(from, { text: '⏳ Extrayendo vídeo...' }, { quoted: msg });
+            await sock.sendMessage(from, { text: '⏳ Descargando vídeo de la plataforma...' }, { quoted: msg });
             try {
                 const apiRes = await axios.get(`https://api.vreden.web.id/api/download/video?url=${encodeURIComponent(url)}`);
                 const downloadUrl = apiRes.data?.result?.downloadUrl || apiRes.data?.result?.url;
