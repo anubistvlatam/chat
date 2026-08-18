@@ -20,10 +20,12 @@ if (!fs.existsSync(SESSION_DIR)) {
 
 const ARCHIVO_COMANDOS = path.join(__dirname, 'comandos_custom.json');
 const ARCHIVO_CONFIG = path.join(__dirname, 'config_grupos.json');
+const ARCHIVO_GRUPOS = path.join(__dirname, 'grupos_permitidos.json');
 
 // CACHÉ EN MEMORIA RAM
 let COMANDOS_CACHE = {};
 let CONFIG_GRUPOS = { bienvenida: "", despedida: "" };
+let GRUPOS_PERMITIDOS = []; // Lista de JIDs de grupos donde el bot tiene permiso de responder
 
 function inicializarArchivos() {
     if (!fs.existsSync(ARCHIVO_COMANDOS)) {
@@ -48,6 +50,10 @@ function inicializarArchivos() {
         fs.writeFileSync(ARCHIVO_CONFIG, JSON.stringify(configInicial, null, 2));
     }
 
+    if (!fs.existsSync(ARCHIVO_GRUPOS)) {
+        fs.writeFileSync(ARCHIVO_GRUPOS, JSON.stringify([], null, 2));
+    }
+
     cargarRAM();
 }
 
@@ -67,8 +73,12 @@ function cargarRAM() {
 
         const rawConfig = fs.readFileSync(ARCHIVO_CONFIG, 'utf-8');
         CONFIG_GRUPOS = JSON.parse(rawConfig);
+
+        const rawGrupos = fs.readFileSync(ARCHIVO_GRUPOS, 'utf-8');
+        GRUPOS_PERMITIDOS = JSON.parse(rawGrupos);
     } catch (e) {
         COMANDOS_CACHE = {};
+        GRUPOS_PERMITIDOS = [];
     }
 }
 
@@ -82,15 +92,17 @@ function guardarConfigBD(config) {
     fs.writeFileSync(ARCHIVO_CONFIG, JSON.stringify(config, null, 2));
 }
 
+function guardarGruposBD(grupos) {
+    GRUPOS_PERMITIDOS = grupos;
+    fs.writeFileSync(ARCHIVO_GRUPOS, JSON.stringify(grupos, null, 2));
+}
+
 inicializarArchivos();
 
-// Normalización estricta de números telefónicos (Quita 521 -> 52 y extrae solo dígitos puros)
 function extraerNumeroPuro(jidOrObj) {
     if (!jidOrObj) return '';
     const str = typeof jidOrObj === 'string' ? jidOrObj : (jidOrObj.id || jidOrObj.jid || '');
     let num = str.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-    
-    // Normalizar números de México (521XXXXXXXXXX -> 52XXXXXXXXXX)
     if (num.startsWith('521') && num.length === 13) {
         num = '52' + num.substring(3);
     }
@@ -449,20 +461,10 @@ async function iniciarBot() {
     sock.ev.on('group-participants.update', async (update) => {
         const { id, participants, action } = update;
 
-        // Solo dar bienvenida/despedida si la cuenta vinculada es Admin en ese grupo
+        // Solo procesar si el grupo está activado
+        if (!GRUPOS_PERMITIDOS.includes(id)) return;
+
         try {
-            const groupMetadata = await sock.groupMetadata(id);
-            const numBot = extraerNumeroPuro(sock.user);
-
-            const cuentaEsAdmin = groupMetadata.participants.some(p => {
-                const esAdmin = (p.admin === 'admin' || p.admin === 'superadmin');
-                const numP = extraerNumeroPuro(p);
-                return esAdmin && numP && numBot && (numP === numBot || numP.includes(numBot) || numBot.includes(numP));
-            });
-
-            if (!cuentaEsAdmin) return; // Si no eres admin en este grupo, no saluda
-
-            // 1. BIENVENIDA
             if (action === 'add') {
                 for (const usuario of participants) {
                     const usuarioJid = typeof usuario === 'string' ? usuario : (usuario.id || '');
@@ -486,7 +488,6 @@ async function iniciarBot() {
                         mentions: [usuarioJid]
                     });
 
-                    // Audio Marilyn Manson
                     const urlAudioManson = "https://files.catbox.moe/8m8m88.mp3"; 
                     try {
                         await sock.sendMessage(id, { 
@@ -498,7 +499,6 @@ async function iniciarBot() {
                 }
             }
 
-            // 2. DESPEDIDA
             if (action === 'remove') {
                 for (const usuario of participants) {
                     const usuarioJid = typeof usuario === 'string' ? usuario : (usuario.id || '');
@@ -536,32 +536,59 @@ async function iniciarBot() {
 
         if (!primerComando.startsWith('.')) return;
 
-        // VERIFICACIÓN ESTRICTA: ¿LA CUENTA CONECTADA ES ADMINISTRADORA DE ESTE GRUPO?
+        // 🟢 COMANDO DE ACTIVACIÓN / DESACTIVACIÓN POR GRUPO
+        if (isGroup && primerComando === '.activarbot') {
+            if (!GRUPOS_PERMITIDOS.includes(from)) {
+                GRUPOS_PERMITIDOS.push(from);
+                guardarGruposBD(GRUPOS_PERMITIDOS);
+            }
+            return await sock.sendMessage(from, { text: '🟢 *BOT ANUBISTV ACTIVADO EN ESTE GRUPO*\n\nA partir de este momento responderé a todos los comandos de los miembros en este chat.' }, { quoted: msg });
+        }
+
+        if (isGroup && primerComando === '.desactivarbot') {
+            GRUPOS_PERMITIDOS = GRUPOS_PERMITIDOS.filter(g => g !== from);
+            guardarGruposBD(GRUPOS_PERMITIDOS);
+            return await sock.sendMessage(from, { text: '🔴 *BOT ANUBISTV DESACTIVADO EN ESTE GRUPO*' }, { quoted: msg });
+        }
+
+        // VERIFICACIÓN DUAL DE GRUPO:
+        // 1. El grupo fue activado explícitamente con .activarbot
+        // 2. O la consulta en vivo confirma que la cuenta es admin.
         if (isGroup) {
-            try {
-                const groupMetadata = await sock.groupMetadata(from);
-                const numBot = extraerNumeroPuro(sock.user);
+            let esGrupoPermitido = GRUPOS_PERMITIDOS.includes(from);
 
-                // Recorremos la lista de admins del grupo y buscamos si la cuenta vinculada está entre ellos
-                const miCuentaEsAdmin = groupMetadata.participants.some(p => {
-                    const esAdmin = (p.admin === 'admin' || p.admin === 'superadmin');
-                    if (!esAdmin) return false;
+            if (!esGrupoPermitido) {
+                try {
+                    const groupMetadata = await sock.groupMetadata(from);
+                    const numBot = extraerNumeroPuro(sock.user);
 
-                    const numP = extraerNumeroPuro(p);
-                    return numP && numBot && (numP === numBot || numP.includes(numBot) || numBot.includes(numP));
-                });
+                    const esAdmin = groupMetadata.participants.some(p => {
+                        const esAdminRole = (p.admin === 'admin' || p.admin === 'superadmin');
+                        if (!esAdminRole) return false;
+                        const numP = extraerNumeroPuro(p);
+                        return numP && numBot && (numP === numBot || numP.includes(numBot) || numBot.includes(numP));
+                    });
 
-                if (!miCuentaEsAdmin) {
-                    console.log(`🔇 [SILENCIADO] La cuenta (${numBot}) NO es Administradora en el grupo ${from}. Ignorando comando "${primerComando}".`);
-                    return; // SE DETIENE TOTALMENTE: El bot no responde nada en este grupo ajeno.
+                    if (esAdmin) {
+                        // Auto-activamos si detectamos admin
+                        if (!GRUPOS_PERMITIDOS.includes(from)) {
+                            GRUPOS_PERMITIDOS.push(from);
+                            guardarGruposBD(GRUPOS_PERMITIDOS);
+                        }
+                        esGrupoPermitido = true;
+                    }
+                } catch (e) {
+                    console.error('Error consulta metadata:', e.message);
                 }
-            } catch (e) {
-                console.error('⚠️ Error verificando estado de administrador en el grupo:', e.message);
+            }
+
+            if (!esGrupoPermitido) {
+                console.log(`🔇 [SILENCIADO EN GRUPO AJENO] ${from}: Usa .activarbot en ese grupo si deseas habilitarlo.`);
                 return;
             }
         }
 
-        console.log(`📩 [EJECUTANDO] Comando "${primerComando}" recibido en grupo autorizado: ${from}`);
+        console.log(`📩 Comando ejecutado: "${primerComando}" en ${from}`);
 
         // 1. COMANDO .MENU
         if (primerComando === '.menu' || primerComando === '.help') {
@@ -580,6 +607,7 @@ async function iniciarBot() {
             `🔹 *.musica <nombre/canción>* : Descarga audio MP3.\n` +
             `🔹 *.descargar <URL>* : Descarga vídeo de enlace.\n\n` +
             `⚙️ *CONFIGURACIÓN DE GRUPO*\n` +
+            `🔹 *.activarbot* / *.desactivarbot* : Enciende/Apaga el bot en un grupo.\n` +
             `🔹 *.bienvenida <texto>* : Cambia la bienvenida.\n` +
             `🔹 *.despedida <texto>* : Cambia la despedida.\n` +
             `🔹 *.actualizastock <texto>* : Modifica .stock.\n` +
