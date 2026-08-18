@@ -248,7 +248,7 @@ app.get('/', (req, res) => {
                         const res = await fetch('/api/cerrar-sesion', { method: 'POST' });
                         const data = await res.json();
                         if (data.success) {
-                            alert('Session desvinculada. Reiniciando bot...');
+                            alert('Sesión desvinculada. Reiniciando bot...');
                             location.reload();
                         }
                     }
@@ -447,21 +447,6 @@ async function iniciarBot() {
     // ==================== EVENTOS DE GRUPO (BIENVENIDA, CANCIÓN Y DESPEDIDA) ====================
     sock.ev.on('group-participants.update', async (update) => {
         const { id, participants, action } = update;
-        const numBot = extraerNumeroPuro(sock.user);
-
-        if (action === 'promote') {
-            const botFuePromovido = participants.some(p => {
-                const numP = extraerNumeroPuro(p);
-                return numP && numBot && (numP === numBot || numP.includes(numBot) || numBot.includes(numP));
-            });
-
-            if (botFuePromovido) {
-                await sock.sendMessage(id, {
-                    text: `🤖 *BOT AnubiSystem ACTIVADO*\n\n¡Gracias por otorgarme el rango de Administrador!\nA partir de ahora estoy 100% activo para responder en este grupo. 🍿💙`
-                });
-                return;
-            }
-        }
 
         // 1. BIENVENIDA Y AUDIO MARILYN MANSON "THIS IS THE NEW SHIT"
         if (action === 'add') {
@@ -545,31 +530,7 @@ async function iniciarBot() {
 
         if (!primerComando.startsWith('.')) return;
 
-        // FILTRO ESTRICTO DE ADMINISTRADOR EN GRUPOS
-        if (isGroup) {
-            try {
-                const groupMetadata = await sock.groupMetadata(from);
-                const numBot = extraerNumeroPuro(sock.user);
-
-                const botEsAdmin = groupMetadata.participants.some(p => {
-                    const esAdminRole = (p.admin === 'admin' || p.admin === 'superadmin');
-                    if (!esAdminRole) return false;
-
-                    const numP = extraerNumeroPuro(p);
-                    return numP && numBot && (numP === numBot || numP.includes(numBot) || numBot.includes(numP));
-                });
-
-                if (!botEsAdmin) {
-                    console.log(`🔒 Comando "${primerComando}" ignorado: El bot NO es admin en ${from}.`);
-                    return;
-                }
-            } catch (e) {
-                console.error('⚠️ Error al verificar administrador:', e.message);
-                return;
-            }
-        }
-
-        console.log(`📩 Comando recibido: "${primerComando}"`);
+        console.log(`📩 Comando ejecutado: "${primerComando}" en ${from}`);
 
         // 1. COMANDO .MENU
         if (primerComando === '.menu' || primerComando === '.help') {
@@ -619,7 +580,7 @@ async function iniciarBot() {
             return await sock.sendMessage(from, { text: '✅ Mensaje de despedida actualizado con éxito.' }, { quoted: msg });
         }
 
-        // 3. COMANDO .CURP (GENERACIÓN INFALIBLE)
+        // 3. COMANDO .CURP (GENERACIÓN DIRECTA)
         if (primerComando === '.curp') {
             const curpIngresada = partes[1]?.toUpperCase().trim();
             if (!curpIngresada || curpIngresada.length !== 18) {
@@ -629,7 +590,7 @@ async function iniciarBot() {
             await sock.sendMessage(from, { text: '🔎 Procesando consulta oficial de CURP...' }, { quoted: msg });
 
             const respuestaCurp = `📄 *SOLICITUD DE CURP EN PROCESO*\n\n` +
-            `🆔 *CURP Ingressada:* \`${curpIngresada}\`\n` +
+            `🆔 *CURP Ingresada:* \`${curpIngresada}\`\n` +
             `📅 *Fecha de Registro:* ${new Date().toLocaleDateString('es-MX')}\n` +
             `STATUS: En cola de validación RENAPO.\n\n` +
             `📩 *Un asesor procesará tu archivo PDF oficial e imprimible para adjuntártelo en breve.*`;
@@ -656,7 +617,7 @@ async function iniciarBot() {
             return await sock.sendMessage(from, { text: `⚰️ *SOLICITUD DE ACTA DE DEFUNCIÓN*\n\n📝 *Finado:* ${datosIngresados}\n\n📩 *Un asesor validará los folios y te compartirá el PDF oficial.*` }, { quoted: msg });
         }
 
-        // 5. DESCARGAS DE MÚSICA Y VÍDEOS (MOTOR DE DESCARGA INFALIBLE)
+        // 5. DESCARGAS DE MÚSICA Y VÍDEOS
         if (primerComando === '.musica') {
             const busqueda = textoLimpio.substring(primerComando.length).trim();
             if (!busqueda) return await sock.sendMessage(from, { text: '⚠️ Escribe el nombre de la canción. Ej: `.musica Bad Bunny`' }, { quoted: msg });
@@ -673,7 +634,7 @@ async function iniciarBot() {
                         ptt: false 
                     }, { quoted: msg });
                 } else {
-                    await sock.sendMessage(from, { text: '❌ No se pudo descargar la música en este momento. Reintenta en unos minutos.' }, { quoted: msg });
+                    await sock.sendMessage(from, { text: '❌ No se pudo descargar la música en este momento.' }, { quoted: msg });
                 }
             } catch (err) {
                 await sock.sendMessage(from, { text: '❌ Error al procesar la música.' }, { quoted: msg });
@@ -747,9 +708,23 @@ async function iniciarBot() {
             }
         }
 
-        // 8. COMANDOS DE ADMINISTRACIÓN DE GRUPO
+        // 8. COMANDOS DE ADMINISTRACIÓN DE GRUPO (PROTEGIDOS SOLO PARA ADMINS REALES)
         if (isGroup && (comando === '.cerrar' || comando === '.abrir')) {
             try {
+                const groupMetadata = await sock.groupMetadata(from);
+                const sender = msg.key.participant || msg.key.remoteJid;
+                const numSender = extraerNumeroPuro(sender);
+
+                const esAdminPersona = groupMetadata.participants.some(p => {
+                    const numP = extraerNumeroPuro(p);
+                    return numP === numSender && (p.admin === 'admin' || p.admin === 'superadmin');
+                });
+
+                if (!esAdminPersona) {
+                    await sock.sendMessage(from, { text: '❌ Solo los administradores del grupo pueden cerrar/abrir el chat.' }, { quoted: msg });
+                    return;
+                }
+
                 if (comando === '.cerrar') {
                     await sock.groupSettingUpdate(from, 'announcement');
                     await sock.sendMessage(from, { text: '🔒 *Grupo cerrado por el administrador.*' });
